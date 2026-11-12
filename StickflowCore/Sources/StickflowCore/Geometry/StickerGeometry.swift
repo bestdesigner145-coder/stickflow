@@ -2,6 +2,9 @@
 // Copyright (C) 2026 Stickflow contributors
 
 import Foundation
+#if canImport(CoreGraphics)
+import CoreGraphics // CGRect members such as `maxX` live here, not in Foundation
+#endif
 
 /// Placement maths in AppKit screen coordinates (origin bottom-left, y grows upwards).
 public enum StickerGeometry {
