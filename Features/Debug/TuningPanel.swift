@@ -3,6 +3,7 @@
 
 #if DEBUG
 import AppKit
+import KeyboardShortcuts
 import SwiftUI
 import StickflowCore
 
@@ -23,6 +24,9 @@ final class TuningPanelController {
             let view = TuningPanelView(
                 tuning: environment.tuning,
                 preferences: environment.preferences,
+                captureProbe: {
+                    environment.stickers.captureWatcher.readNow()
+                },
                 onTuningChange: {
                     environment.stickers.applyPreferences()
                 },
@@ -35,7 +39,7 @@ final class TuningPanelController {
             newWindow.title = "Stickflow Tuning"
             newWindow.styleMask = [.titled, .closable, .resizable, .miniaturizable]
             newWindow.isReleasedWhenClosed = false
-            newWindow.setContentSize(NSSize(width: 400, height: 680))
+            newWindow.setContentSize(NSSize(width: 420, height: 720))
             newWindow.center()
             window = newWindow
         }
@@ -47,12 +51,17 @@ final class TuningPanelController {
 struct TuningPanelView: View {
     @Bindable var tuning: Tuning
     @Bindable var preferences: Preferences
+    /// Asks the window server whether the screen is captured; `nil` if it cannot tell.
+    let captureProbe: @MainActor () -> Bool?
     let onTuningChange: @MainActor () -> Void
     let onPreferencesChange: @MainActor () -> Void
+
+    @State private var captureStatus = "not checked"
 
     var body: some View {
         Form {
             settingsSection
+            screenSharingSection
             fadeSection
             editSection
             geometrySection
@@ -92,12 +101,47 @@ struct TuningPanelView: View {
             .onChange(of: preferences.editKey) { onPreferencesChange() }
 
             ToggleRow(title: "Fade under the cursor", isOn: $preferences.fadeEnabled, onChange: onPreferencesChange)
-            ToggleRow(title: "Hide from screen sharing", isOn: $preferences.hideFromScreenSharing,
-                      onChange: onPreferencesChange)
             ToggleRow(title: "Show over full-screen apps", isOn: $preferences.showOverFullscreen,
                       onChange: onPreferencesChange)
         } header: {
             Text(verbatim: "Settings (temporary home)")
+        }
+    }
+
+    // MARK: Screen sharing (spec 5.2; moves to the settings window in stage 4)
+
+    private var screenSharingSection: some View {
+        Section {
+            LabeledContent {
+                KeyboardShortcuts.Recorder(for: .toggleStickers)
+            } label: {
+                Text(verbatim: "Hotkey: show / hide all stickers")
+            }
+            ToggleRow(title: "Keep stickers out of screenshots", isOn: $preferences.hideFromScreenCapture,
+                      onChange: onPreferencesChange)
+            ToggleRow(title: "Hide while the screen is captured (experimental)",
+                      isOn: $preferences.hideWhileScreenIsCaptured, onChange: onPreferencesChange)
+            LabeledContent {
+                Text(verbatim: captureStatus)
+                    .foregroundStyle(.secondary)
+            } label: {
+                Button {
+                    switch captureProbe() {
+                    case .some(true): captureStatus = "captured"
+                    case .some(false): captureStatus = "not captured"
+                    case .none: captureStatus = "this macOS cannot tell"
+                    }
+                } label: {
+                    Text(verbatim: "Is the screen captured now?")
+                }
+            }
+        } header: {
+            Text(verbatim: "Screen sharing (5.2)")
+        } footer: {
+            Text(verbatim: "macOS gives no reliable way to hide a window from screen sharing. "
+                + "“Out of screenshots” works for the system screenshot tool only; Zoom, Meet and Telegram "
+                + "still see stickers, and stickers may vanish during system animations while it is on. "
+                + "The experimental switch relies on a private system call.")
         }
     }
 
@@ -167,6 +211,12 @@ struct TuningPanelView: View {
                       isOn: $tuning.fullscreenUsesWindowLevel, onChange: onTuningChange)
             ToggleRow(title: "Return after the title starts a task",
                       isOn: $tuning.newLineAfterTitleIsTodo, onChange: onTuningChange)
+            ToggleRow(title: "Give focus back without hiding the sticker",
+                      isOn: $tuning.focusReturnUsesHelperPanel, onChange: onTuningChange)
+            ToggleRow(title: "Spaces: transient instead of stationary",
+                      isOn: $tuning.spacesBehaviorTransient, onChange: onTuningChange)
+            ToggleRow(title: "⌘Z restores a peeled sticker while the toast is up",
+                      isOn: $tuning.undoPeelUsesCommandZ, onChange: onTuningChange)
         } header: {
             Text(verbatim: "Behaviour variants (rule 0.3)")
         }
@@ -183,6 +233,16 @@ struct TuningPanelView: View {
             }
             .pickerStyle(.segmented)
             .onChange(of: tuning.animationSlowdown) { onTuningChange() }
+
+            SliderRow(title: "Appear, s", value: $tuning.appearDuration, range: 0...0.6, onChange: onTuningChange)
+            SliderRow(title: "Appear start scale", value: $tuning.appearStartScale, range: 0.8...1,
+                      onChange: onTuningChange)
+            SliderRow(title: "Peel, s", value: $tuning.peelDuration, range: 0...0.6, onChange: onTuningChange)
+            SliderRow(title: "Peel end scale", value: $tuning.peelEndScale, range: 0.1...1, onChange: onTuningChange)
+            SliderRow(title: "Theme change, s", value: $tuning.themeTransitionDuration, range: 0...0.6,
+                      onChange: onTuningChange)
+            SliderRow(title: "Toast stays, s", value: $tuning.toastDuration, range: 1...10, step: 1,
+                      onChange: onTuningChange)
         } header: {
             Text(verbatim: "Animation (6.7)")
         }
@@ -210,13 +270,26 @@ private struct SliderRow: View {
         .onChange(of: value) { onChange() }
     }
 
-    @ViewBuilder
+    /// `Slider(value:in:step:)` draws a tick mark for every step on macOS; with a
+    /// small step they merge into a dashed line. So the slider itself is
+    /// continuous and the value is rounded to the step here.
     private var slider: some View {
-        if let step {
-            Slider(value: $value, in: range, step: step)
-        } else {
-            Slider(value: $value, in: range)
-        }
+        Slider(value: steppedValue, in: range)
+    }
+
+    private var steppedValue: Binding<Double> {
+        let binding = $value
+        let step = step
+        return Binding(
+            get: { binding.wrappedValue },
+            set: { newValue in
+                if let step, step > 0 {
+                    binding.wrappedValue = (newValue / step).rounded() * step
+                } else {
+                    binding.wrappedValue = newValue
+                }
+            }
+        )
     }
 
     private var formatted: String {

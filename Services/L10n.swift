@@ -8,6 +8,8 @@ import StickflowCore
 enum L10n {
     static var menuNewSticker: String { String(localized: "menu.new_sticker") }
     static var menuToggleAll: String { String(localized: "menu.toggle_all") }
+    static var menuPeelAll: String { String(localized: "menu.peel_all") }
+    static var menuRestoreLast: String { String(localized: "menu.restore_last") }
     static var menuHistory: String { String(localized: "menu.history") }
     static var menuStickerDisplay: String { String(localized: "menu.sticker_display") }
     static var menuDisplayAutomatic: String { String(localized: "menu.display_automatic") }
@@ -18,8 +20,11 @@ enum L10n {
 
     static var stickerMenuPaperColor: String { String(localized: "sticker.menu.paper_color") }
     static var stickerMenuPeel: String { String(localized: "sticker.menu.peel") }
-    static var stickerMenuDelete: String { String(localized: "sticker.menu.delete") }
+    static var stickerStripMenu: String { String(localized: "sticker.strip.menu") }
     static var stickerPlaceholder: String { String(localized: "sticker.placeholder") }
+
+    static var toastPeeledOne: String { String(localized: "toast.peeled_one") }
+    static var toastRestore: String { String(localized: "toast.restore") }
 
     static var errorDatabaseTitle: String { String(localized: "error.database.title") }
     static var errorLoginItemTitle: String { String(localized: "error.login_item.title") }
@@ -28,6 +33,11 @@ enum L10n {
     /// "4 more" under a sticker whose text does not fit.
     static func stickerMore(_ count: Int) -> String {
         String.localizedStringWithFormat(String(localized: "sticker.more"), count)
+    }
+
+    /// "Stickers peeled off: 5" in the toast after "Peel Off All Stickers".
+    static func toastPeeledMany(_ count: Int) -> String {
+        String.localizedStringWithFormat(String(localized: "toast.peeled_many"), count)
     }
 
     /// "⌥ — edit" hint next to the cursor.

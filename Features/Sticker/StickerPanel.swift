@@ -43,11 +43,19 @@ final class StickerPanel: NSPanel {
     ///   - usesWindowLevel: debug switch. Off (default): the setting adds or removes
     ///     `.fullScreenAuxiliary`. On: the spec variant, where the behaviour is always
     ///     present and the setting only raises the window level.
-    ///   - hideFromScreenSharing: asks the system to leave the window out of
-    ///     screenshots and screen sharing. Not a guarantee on macOS 15 and later:
-    ///     ScreenCaptureKit-based capture ignores it.
-    func applySystemBehavior(showOverFullscreen: Bool, usesWindowLevel: Bool, hideFromScreenSharing: Bool) {
-        var behavior: NSWindow.CollectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+    ///   - floatsAcrossSpaces: debug switch. Off (spec): `.stationary`. On: `.transient`.
+    ///   - hideFromScreenCapture: asks the system to leave the window out of
+    ///     screenshots. Apps that share the screen through ScreenCaptureKit still
+    ///     see it, and system animations that work on window snapshots may drop the
+    ///     window while they run. Off by default.
+    func applySystemBehavior(
+        showOverFullscreen: Bool,
+        usesWindowLevel: Bool,
+        floatsAcrossSpaces: Bool,
+        hideFromScreenCapture: Bool
+    ) {
+        var behavior: NSWindow.CollectionBehavior = [.canJoinAllSpaces, .ignoresCycle]
+        behavior.insert(floatsAcrossSpaces ? .transient : .stationary)
         if usesWindowLevel {
             behavior.insert(.fullScreenAuxiliary)
             level = showOverFullscreen ? .statusBar : .floating
@@ -60,6 +68,9 @@ final class StickerPanel: NSPanel {
         if collectionBehavior != behavior {
             collectionBehavior = behavior
         }
-        sharingType = hideFromScreenSharing ? .none : .readOnly
+        let wantedSharing: NSWindow.SharingType = hideFromScreenCapture ? .none : .readOnly
+        if sharingType != wantedSharing {
+            sharingType = wantedSharing
+        }
     }
 }

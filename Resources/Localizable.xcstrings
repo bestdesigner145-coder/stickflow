@@ -205,6 +205,23 @@
         }
       }
     },
+    "menu.peel_all": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Peel Off All Stickers"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Снять все стикеры"
+          }
+        }
+      }
+    },
     "menu.quit": {
       "extractionState": "manual",
       "localizations": {
@@ -218,6 +235,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Выйти"
+          }
+        }
+      }
+    },
+    "menu.restore_last": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restore Last Peeled Sticker"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вернуть последний снятый"
           }
         }
       }
@@ -269,23 +303,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Показать / скрыть все стикеры"
-          }
-        }
-      }
-    },
-    "sticker.menu.delete": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Delete"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Удалить"
           }
         }
       }
@@ -354,6 +371,74 @@
           "stringUnit": {
             "state": "translated",
             "value": "Новый стикер"
+          }
+        }
+      }
+    },
+    "sticker.strip.menu": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sticker menu"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Меню стикера"
+          }
+        }
+      }
+    },
+    "toast.peeled_many": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stickers peeled off: %lld"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Снято стикеров: %lld"
+          }
+        }
+      }
+    },
+    "toast.peeled_one": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sticker peeled off"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Стикер снят"
+          }
+        }
+      }
+    },
+    "toast.restore": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restore"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вернуть"
           }
         }
       }

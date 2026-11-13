@@ -130,9 +130,23 @@ final class PaperFillView: NSView {
         layoutLayers()
     }
 
-    func setColors(paper: NSColor, strip: NSColor, border: NSColor, cornerRadius: CGFloat) {
+    /// - Parameter duration: above zero, the colours flow into the new ones
+    ///   (theme change, spec 6.7); zero switches them at once.
+    func setColors(
+        paper: NSColor,
+        strip: NSColor,
+        border: NSColor,
+        cornerRadius: CGFloat,
+        duration: CFTimeInterval = 0,
+        curve: MotionCurve = .ease
+    ) {
         CATransaction.begin()
-        CATransaction.setDisableActions(true)
+        if duration > 0 {
+            CATransaction.setAnimationDuration(duration)
+            CATransaction.setAnimationTimingFunction(curve.timingFunction)
+        } else {
+            CATransaction.setDisableActions(true)
+        }
         fillLayer.backgroundColor = paper.cgColor
         fillLayer.borderColor = border.cgColor
         fillLayer.cornerRadius = cornerRadius

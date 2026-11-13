@@ -30,6 +30,8 @@ final class StickerController: NSObject {
 
     private(set) var mode: Mode = .rest
     private(set) var isClosed = false
+    /// Peeled off and flying away; the window closes when the animation ends.
+    private(set) var isLeaving = false
     private var isDragging = false
     private var isMenuOpen = false
 
@@ -64,19 +66,89 @@ final class StickerController: NSObject {
         applySettings()
     }
 
-    func show() {
-        guard !isClosed else { return }
+    /// Puts the sticker on screen.
+    /// - Parameter animated: a sticker that was not visible grows from 0.96 and
+    ///   fades in, its shadow with it (spec 6.7).
+    func show(animated: Bool = false) {
+        guard !isClosed, !isLeaving else { return }
+        guard animated, !panel.isVisible else {
+            panel.orderFrontRegardless()
+            return
+        }
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let duration = tuning.scaled(reduceMotion ? tuning.reducedMotionFade : tuning.appearDuration)
+        let targetAlpha = mode == .faded ? CGFloat(tuning.fadedOpacity) : 1
+        panel.alphaValue = 0
         panel.orderFrontRegardless()
+        if !reduceMotion {
+            rootView.animateScale(
+                from: CGFloat(tuning.appearStartScale),
+                to: 1,
+                duration: duration,
+                curve: .easeOut
+            )
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = duration
+            context.timingFunction = MotionCurve.easeOut.timingFunction
+            panel.animator().alphaValue = targetAlpha
+        }
     }
 
     func hide() {
-        guard !isClosed else { return }
+        guard !isClosed, !isLeaving else { return }
         endEditing()
         panel.orderOut(nil)
     }
 
     var isOnScreen: Bool {
-        !isClosed && panel.isVisible
+        !isClosed && !isLeaving && panel.isVisible
+    }
+
+    /// Takes the sticker off the screen for good (spec 4.10, 6.7): it flies towards
+    /// `edgeX`, shrinks and fades, then its window closes. The caller has already
+    /// saved the model.
+    /// - Parameter edgeX: screen x of the edge to fly to; `nil` just fades.
+    func peelAway(towardsX edgeX: CGFloat?) {
+        guard !isClosed, !isLeaving else { return }
+        isLeaving = true
+        removeClickMonitors()
+        cancelIdleTimer()
+        rootView.delegate = nil
+        panel.ignoresMouseEvents = true
+        guard panel.isVisible else {
+            close()
+            return
+        }
+
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let duration = tuning.scaled(reduceMotion ? tuning.reducedMotionFade : tuning.peelDuration)
+        let curve: MotionCurve = reduceMotion ? .ease : .easeInOut
+        let target: NSRect?
+        if !reduceMotion, let edgeX {
+            rootView.animateScale(
+                from: 1,
+                to: CGFloat(tuning.peelEndScale),
+                duration: duration,
+                curve: curve,
+                keepsFinalState: true
+            )
+            target = panel.frame.offsetBy(dx: edgeX - panel.frame.midX, dy: 0)
+        } else {
+            target = nil
+        }
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = duration
+            context.timingFunction = curve.timingFunction
+            if let target {
+                panel.animator().setFrame(target, display: false)
+            }
+            panel.animator().alphaValue = 0
+        }, completionHandler: { [self] in
+            MainActor.assumeIsolated {
+                self.close()
+            }
+        })
     }
 
     func close() {
@@ -143,7 +215,8 @@ final class StickerController: NSObject {
         panel.applySystemBehavior(
             showOverFullscreen: preferences.showOverFullscreen,
             usesWindowLevel: tuning.fullscreenUsesWindowLevel,
-            hideFromScreenSharing: preferences.hideFromScreenSharing
+            floatsAcrossSpaces: tuning.spacesBehaviorTransient,
+            hideFromScreenCapture: preferences.hideFromScreenCapture
         )
 
         let textView = rootView.textView
@@ -208,23 +281,11 @@ final class StickerController: NSObject {
         let duration = animated ? tuning.scaled(baseDuration) : 0
         let curve = MotionCurve.easeOut
 
-        let darkBoost = rootView.effectiveAppearance.isDark ? tuning.darkShadowMultiplier : 1.0
-        let shadow = isLifted
-            ? ShadowSpec(
-                offsetY: CGFloat(tuning.liftedShadowOffset),
-                blur: CGFloat(tuning.liftedShadowBlur),
-                opacity: CGFloat(min(tuning.liftedShadowOpacity * darkBoost, 1))
-            )
-            : ShadowSpec(
-                offsetY: CGFloat(tuning.restShadowOffset),
-                blur: CGFloat(tuning.restShadowBlur),
-                opacity: CGFloat(min(tuning.restShadowOpacity * darkBoost, 1))
-            )
-
-        rootView.setChromeVisible(isLifted)
+        // A long sticker scrolled with the edit key returns to its beginning at rest.
+        rootView.setChromeVisible(isLifted, scrollResetDuration: duration)
         rootView.setPaperOpacity(CGFloat(paperOpacity), duration: duration, curve: curve)
         rootView.setTextOpacity(CGFloat(textOpacity), duration: duration, curve: curve)
-        rootView.setShadow(shadow, duration: duration, curve: curve)
+        rootView.setShadow(shadowSpec, duration: duration, curve: curve)
 
         if duration > 0 {
             NSAnimationContext.runAnimationGroup { context in
@@ -235,6 +296,24 @@ final class StickerController: NSObject {
         } else {
             panel.alphaValue = CGFloat(windowAlpha)
         }
+    }
+
+    /// The shadow for the current state and theme (spec 6.2).
+    private var shadowSpec: ShadowSpec {
+        let isLifted = mode == .editMode || mode == .editing
+        let darkBoost = rootView.effectiveAppearance.isDark ? tuning.darkShadowMultiplier : 1.0
+        if isLifted {
+            return ShadowSpec(
+                offsetY: CGFloat(tuning.liftedShadowOffset),
+                blur: CGFloat(tuning.liftedShadowBlur),
+                opacity: CGFloat(min(tuning.liftedShadowOpacity * darkBoost, 1))
+            )
+        }
+        return ShadowSpec(
+            offsetY: CGFloat(tuning.restShadowOffset),
+            blur: CGFloat(tuning.restShadowBlur),
+            opacity: CGFloat(min(tuning.restShadowOpacity * darkBoost, 1))
+        )
     }
 
     // MARK: Pointer
@@ -365,10 +444,14 @@ final class StickerController: NSObject {
         rootView.isEditing = false
         panel.allowsKeyStatus = false
         if panel.isKeyWindow, panel.isVisible {
-            // A non-activating panel keeps keyboard focus until another window takes it.
-            // Re-ordering the panel hands focus back to the app the user was working in.
-            panel.orderOut(nil)
-            panel.orderFrontRegardless()
+            // A non-activating panel keeps keyboard focus until another window takes
+            // it; hand it back to the app the user was working in.
+            if let manager {
+                manager.returnKeyboardFocus(from: self)
+            } else {
+                panel.orderOut(nil)
+                panel.orderFrontRegardless()
+            }
         }
 
         hoverSince = nil
@@ -459,24 +542,23 @@ final class StickerController: NSObject {
 
         let colorItem = NSMenuItem(title: L10n.stickerMenuPaperColor, action: nil, keyEquivalent: "")
         let colorMenu = NSMenu()
+        let isDark = rootView.effectiveAppearance.isDark
         for color in PaperColor.allCases {
             let item = NSMenuItem(title: L10n.name(of: color), action: #selector(pickColor(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = color.rawValue
             item.state = color == sticker.color ? .on : .off
+            item.image = Self.swatch(for: color, dark: isDark)
             colorMenu.addItem(item)
         }
         colorItem.submenu = colorMenu
         menu.addItem(colorItem)
         menu.addItem(.separator())
 
+        // There is no "Delete" here: a sticker always goes to history first (spec 4.10).
         let peelItem = NSMenuItem(title: L10n.stickerMenuPeel, action: #selector(peelFromMenu), keyEquivalent: "")
         peelItem.target = self
         menu.addItem(peelItem)
-
-        let deleteItem = NSMenuItem(title: L10n.stickerMenuDelete, action: #selector(deleteFromMenu), keyEquivalent: "")
-        deleteItem.target = self
-        menu.addItem(deleteItem)
 
         isMenuOpen = true
         menu.popUp(positioning: nil, at: rootView.menuAnchor, in: rootView)
@@ -497,8 +579,19 @@ final class StickerController: NSObject {
         manager?.peel(self)
     }
 
-    @objc private func deleteFromMenu() {
-        manager?.delete(self)
+    /// A circle in the paper colour, shown next to the colour's name in the menu.
+    private static func swatch(for color: PaperColor, dark: Bool) -> NSImage {
+        let rgb = color.palette.paper(dark: dark)
+        return NSImage(size: NSSize(width: 14, height: 14), flipped: false) { rect in
+            let circle = NSBezierPath(ovalIn: rect.insetBy(dx: 1.5, dy: 1.5))
+            NSColor(rgb: rgb).setFill()
+            circle.fill()
+            // Paper colours are close to the menu background; the outline keeps the circle readable.
+            NSColor.labelColor.withAlphaComponent(0.3).setStroke()
+            circle.lineWidth = 1
+            circle.stroke()
+            return true
+        }
     }
 }
 
@@ -551,10 +644,17 @@ extension StickerController: StickerRootViewDelegate {
         showMenu()
     }
 
+    func rootViewDidClickCloseButton(_ view: StickerRootView) {
+        manager?.peel(self)
+    }
+
     func rootViewDidChangeAppearance(_ view: StickerRootView) {
         guard !isClosed else { return }
-        view.applyColors(sticker.color)
-        applyMode(from: nil, animated: false)
+        // The system theme changed. The window stays where it is; paper, text and
+        // shadow flow into the new colours together with the system (spec 6.7).
+        let duration = panel.isVisible ? tuning.scaled(tuning.themeTransitionDuration) : 0
+        view.applyColors(sticker.color, duration: duration, curve: .ease)
+        view.setShadow(shadowSpec, duration: duration, curve: .ease)
     }
 }
 

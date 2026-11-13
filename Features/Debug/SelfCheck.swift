@@ -85,8 +85,11 @@ enum SelfCheck {
             let editKey = environment.preferences.editKey.flag
 
             // Snapshots must show the sticker; do not persist this change.
-            environment.preferences.hideFromScreenSharing = false
+            environment.preferences.hideFromScreenCapture = false
+            environment.preferences.hideWhileScreenIsCaptured = false
             stickers.applyPreferences()
+            let watcher = stickers.captureWatcher
+            note("screen-capture probe: available \(watcher.isAvailable), captured now \(String(describing: watcher.readNow()))")
 
             if let screen = environment.displays.menuBarScreen {
                 note("screen frame \(screen.frame), visible \(screen.visibleFrame), scale \(screen.backingScaleFactor)")
@@ -108,6 +111,7 @@ enum SelfCheck {
             let textView = controller.rootView.textView
             check(controller.mode == .editing, "a new sticker starts in editing")
             check(controller.panel.isKeyWindow, "the panel has keyboard focus while editing")
+            check(abs(Double(controller.panel.alphaValue) - 1) < 0.02, "the new sticker has finished appearing (alpha \(controller.panel.alphaValue))")
             let frontWhileEditing = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
             note("frontmost app while editing: \(frontWhileEditing ?? "none"), Stickflow active: \(NSApp.isActive)")
             if let frontBefore, frontBefore != ownBundleID {
@@ -158,6 +162,8 @@ enum SelfCheck {
             check(!controller.panel.isKeyWindow, "the panel gives keyboard focus back")
             check(controller.panel.ignoresMouseEvents, "at rest the panel ignores the mouse")
             check(controller.panel.isVisible, "the sticker stays on screen after editing")
+            check(NSApp.keyWindow == nil, "no Stickflow window keeps the keyboard after editing (key window: \(String(describing: NSApp.keyWindow)))")
+            check(stickers.focusReturnFallbacks == 0, "the keyboard went back without hiding the sticker (fallbacks: \(stickers.focusReturnFallbacks))")
             let frontAfter = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
             note("frontmost app after editing: \(frontAfter ?? "none"), Stickflow active: \(NSApp.isActive)")
             if let frontBefore, frontBefore != ownBundleID {
@@ -256,6 +262,7 @@ enum SelfCheck {
             // 7. Dark appearance.
             NSApp.appearance = NSAppearance(named: .darkAqua)
             await pause(0.4)
+            check(controller.panel.isVisible && abs(Double(controller.panel.alphaValue) - 1) < 0.02, "the sticker stays on screen through a theme change")
             snapshot(controller, name: "4-rest-dark")
             NSApp.appearance = nil
             await pause(0.3)
@@ -283,6 +290,24 @@ enum SelfCheck {
                     "the second sticker is cascaded by \(offset) pt (first \(controller.paperFrame), second \(long.paperFrame))"
                 )
                 snapshot(long, name: "6-long-rest")
+
+                // With the edit key held a long sticker scrolls right away, no click (fix F1).
+                let longInside = CGPoint(x: long.paperFrame.midX, y: long.paperFrame.midY)
+                long.pointerDidUpdate(sample(longInside, key: true, at: 10.0))
+                check(long.mode == .editMode, "the long sticker enters edit mode")
+                let scrolled = long.rootView.scrollText(by: 60)
+                check(scrolled && long.rootView.scrollOffset > 40, "with the edit key a long sticker scrolls without a click (offset \(long.rootView.scrollOffset))")
+                await pause(0.2)
+                snapshot(long, name: "6b-long-scrolled")
+                long.rootView.scrollText(by: 10_000)
+                note("long sticker scrolled to the end: offset \(long.rootView.scrollOffset)")
+                await pause(0.2)
+                snapshot(long, name: "6c-long-scrolled-end")
+                long.pointerDidUpdate(sample(outside, at: 11.0))
+                long.pointerDidUpdate(sample(outside, at: 11.0 + tuning.editKeyReleaseGrace + 0.01))
+                check(long.mode == .rest, "the long sticker returns to rest")
+                await pause(0.5)
+                check(long.rootView.scrollOffset < 0.5, "at rest the long sticker shows its beginning again (offset \(long.rootView.scrollOffset))")
             } else {
                 check(false, "a second sticker is created")
             }
@@ -293,24 +318,129 @@ enum SelfCheck {
                 let captured = captureScreen(area, on: screen, name: "7-screen")
                 note("screen capture written: \(captured)")
 
-                // The same area with "hide from screen sharing" on, to see what this macOS does with it.
-                environment.preferences.hideFromScreenSharing = true
+                // The same area with "keep out of screenshots" on, to see what this macOS does with it.
+                environment.preferences.hideFromScreenCapture = true
                 stickers.applyPreferences()
                 await pause(0.4)
                 _ = captureScreen(area, on: screen, name: "8-screen-hidden")
-                environment.preferences.hideFromScreenSharing = false
+                environment.preferences.hideFromScreenCapture = false
                 stickers.applyPreferences()
             }
 
-            // 10. Persistence and peeling.
+            // 10. Peeling, the toast and the ways back (spec 4.10; fixes F6–F9).
+            let firstID = controller.sticker.id
+            let firstFrame = controller.paperFrame
             do {
                 check(try environment.repository.stickers(status: .active).count == 2, "two active stickers are stored")
+                check(!stickers.canRestoreLastPeeled, "nothing to restore before the first peel")
                 stickers.peel(controller)
                 check(try environment.repository.stickers(status: .active).count == 1, "peeling removes the sticker from the active list")
                 check(try environment.repository.stickers(status: .draft).count == 1, "a peeled sticker with open tasks becomes a draft")
-                check(stickers.controllers.count == 1, "the peeled sticker leaves the screen")
+                check(try environment.repository.lastPeeled()?.id == firstID, "the peeled sticker is stored with the time it was peeled")
+                check(stickers.controllers.count == 1, "the peeled sticker is off the list at once")
+                check(stickers.isUndoToastVisible, "peeling shows the toast")
+                check(stickers.canRestoreLastPeeled, "the menu bar can restore the last peeled sticker")
+                await pause(0.35)
+                snapshotToast(name: "9-toast")
+                if let screen = environment.displays.menuBarScreen, let frame = stickers.toastSnapshotView?.window?.frame {
+                    _ = captureScreen(frame.insetBy(dx: -24, dy: -24), on: screen, name: "9b-screen-toast")
+                }
+                await pause(0.3)
+                check(controller.isClosed, "the peeled sticker's window closes when its animation ends")
+
+                stickers.undoLastPeel()
+                await pause(0.6)
+                if let restored = stickers.controllers.first(where: { $0.sticker.id == firstID }) {
+                    check(restored.sticker.status == .active && restored.sticker.peeledAt == nil, "Restore in the toast makes the sticker active again")
+                    check(
+                        abs(restored.paperFrame.minX - firstFrame.minX) <= 1 && abs(restored.paperFrame.maxY - firstFrame.maxY) <= 1,
+                        "it comes back to the same place (was \(firstFrame), is \(restored.paperFrame))"
+                    )
+                    check(restored.panel.isVisible && abs(Double(restored.panel.alphaValue) - 1) < 0.02, "the restored sticker has finished appearing (alpha \(restored.panel.alphaValue))")
+                    check(restored.sticker.blocks.count == 5, "the restored sticker keeps its blocks (\(restored.sticker.blocks.count))")
+                } else {
+                    check(false, "Restore in the toast brings the sticker back")
+                }
+                check(!stickers.isUndoToastVisible, "the toast goes away after Restore")
+                check(try environment.repository.stickers(status: .active).count == 2, "both stickers are active again")
+                check(!stickers.canRestoreLastPeeled, "nothing is left to restore")
+
+                // One action takes everything off, one toast brings everything back.
+                stickers.peelAll()
+                check(stickers.controllers.isEmpty, "“Peel off all” takes every sticker off")
+                check(try environment.repository.stickers(status: .active).isEmpty, "no sticker stays active after “Peel off all”")
+                await pause(0.4)
+                snapshotToast(name: "10-toast-all")
+                stickers.undoLastPeel()
+                await pause(0.6)
+                check(stickers.controllers.count == 2, "one Restore brings all of them back (\(stickers.controllers.count))")
+
+                // The menu-bar way back, without the toast.
+                if let again = stickers.controllers.first(where: { $0.sticker.id == firstID }) {
+                    stickers.peel(again)
+                    await pause(0.4)
+                    stickers.restoreLastPeeled()
+                    await pause(0.5)
+                    check(stickers.controllers.contains { $0.sticker.id == firstID }, "“Restore last peeled” brings the sticker back")
+                    check(!stickers.isUndoToastVisible, "restoring from the menu bar dismisses the toast")
+                }
+
+                // Hide all and show all (the quick way out before sharing the screen).
+                stickers.toggleStickersHidden()
+                check(stickers.controllers.allSatisfy { !$0.panel.isVisible }, "“hide all” takes every sticker off the screen at once")
+                stickers.toggleStickersHidden()
+                await pause(0.5)
+                check(stickers.controllers.allSatisfy { $0.panel.isVisible && abs(Double($0.panel.alphaValue) - 1) < 0.02 }, "“show all” brings them back")
             } catch {
                 check(false, "the repository can be queried (\(error))")
+            }
+
+            // 11. "[] " typed where those keys give letters (fix F12). On a Russian
+            // layout "[", "]" and space type "х", "ъ" and a space.
+            stickers.createSticker()
+            await pause(0.4)
+            if let probe = stickers.controllers.last, probe.mode == .editing {
+                let probeText = probe.rootView.textView
+                probeText.insertText("Проба клавиш", replacementRange: probeText.selectedRange())
+                probeText.insertNewline(nil)
+                probeText.deleteBackward(nil) // the new line starts as a task; make it plain text
+                check(probeText.metas.last?.kind == .text, "the probe line starts as plain text")
+
+                let keys: [(code: UInt16, characters: String)] = [(33, "х"), (30, "ъ"), (49, " ")]
+                var textAfterTwoKeys = ""
+                for (index, key) in keys.enumerated() {
+                    if let event = NSEvent.keyEvent(
+                        with: .keyDown,
+                        location: .zero,
+                        modifierFlags: [],
+                        timestamp: ProcessInfo.processInfo.systemUptime,
+                        windowNumber: probe.panel.windowNumber,
+                        context: nil,
+                        characters: key.characters,
+                        charactersIgnoringModifiers: key.characters,
+                        isARepeat: false,
+                        keyCode: key.code
+                    ) {
+                        probeText.keyDown(with: event)
+                    }
+                    if index == 1 { textAfterTwoKeys = probeText.string }
+                }
+                await pause(0.2)
+                note("probe after two keys: «\(textAfterTwoKeys.replacingOccurrences(of: "\n", with: " ⏎ "))»; after three: «\(probeText.string.replacingOccurrences(of: "\n", with: " ⏎ "))», kinds \(probeText.metas.map { $0.kind.rawValue })")
+                check(textAfterTwoKeys.hasSuffix("хъ"), "the synthetic keys typed Russian letters, so the test exercises key positions")
+                check(
+                    probeText.metas.last?.kind == .todo && probeText.string == "Проба клавиш\n",
+                    "“[] ” on a Russian layout turns the line into a task"
+                )
+
+                // Empty the probe: a sticker without text is discarded when editing ends.
+                probeText.selectAll(nil)
+                probeText.deleteBackward(nil)
+                probe.endEditing()
+                await pause(0.3)
+                check(!stickers.controllers.contains { $0 === probe }, "the emptied probe sticker is discarded")
+            } else {
+                check(false, "a probe sticker is created for the key test")
             }
         }
 
@@ -323,6 +453,17 @@ enum SelfCheck {
             view.layoutSubtreeIfNeeded()
             view.displayIfNeeded()
 
+            if let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                view.cacheDisplay(in: view.bounds, to: rep)
+                write(rep, name: name)
+            }
+        }
+
+        /// Renders the "Sticker peeled off · Restore" toast.
+        func snapshotToast(name: String) {
+            guard let view = environment.stickers.toastSnapshotView else { return }
+            view.layoutSubtreeIfNeeded()
+            view.displayIfNeeded()
             if let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
                 view.cacheDisplay(in: view.bounds, to: rep)
                 write(rep, name: name)

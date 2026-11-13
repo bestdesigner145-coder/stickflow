@@ -43,10 +43,21 @@ final class AppEnvironment {
         stickers.onError = { [weak self] title, error in
             self?.report(title: title, error: error)
         }
-        stickers.start()
-        hotkeys.start { [weak self] in
-            self?.stickers.createSticker()
+        stickers.onUndoShortcutArmedChange = { [weak self] armed in
+            self?.hotkeys.setUndoPeelArmed(armed)
         }
+        stickers.start()
+        hotkeys.start(
+            onQuickInput: { [weak self] in
+                self?.stickers.createSticker()
+            },
+            onToggleStickers: { [weak self] in
+                self?.stickers.toggleStickersHidden()
+            },
+            onUndoPeel: { [weak self] in
+                self?.stickers.undoLastPeel()
+            }
+        )
         statusItem = StatusItemController(environment: self)
     }
 

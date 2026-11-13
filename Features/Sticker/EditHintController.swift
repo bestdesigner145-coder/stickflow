@@ -10,7 +10,7 @@ final class EditHintController: NSObject {
     private var panel: NSPanel?
     private let label = NSTextField(labelWithString: "")
 
-    func show(text: String, near location: CGPoint, duration: TimeInterval, hideFromScreenSharing: Bool) {
+    func show(text: String, near location: CGPoint, duration: TimeInterval, hideFromScreenCapture: Bool) {
         let panel = self.panel ?? makePanel()
         self.panel = panel
 
@@ -26,7 +26,7 @@ final class EditHintController: NSObject {
         // Below and to the right of the cursor, where it does not cover the arrow.
         let frame = NSRect(x: location.x + 14, y: location.y - size.height - 16, width: size.width, height: size.height)
         panel.setFrame(frame, display: true)
-        panel.sharingType = hideFromScreenSharing ? .none : .readOnly
+        panel.sharingType = hideFromScreenCapture ? .none : .readOnly
         panel.orderFrontRegardless()
 
         NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(hideAfterDelay), object: nil)

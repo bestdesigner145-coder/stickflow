@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Stickflow contributors
 
 import AppKit
+import KeyboardShortcuts
 
 /// The menu bar item and its menu (spec 5.4).
 @MainActor
@@ -27,6 +28,16 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         rebuildMenu()
     }
 
+    // While the menu is open its item reacts to the hotkey itself. The global
+    // hotkey would fire a second time when the menu closes and undo the action.
+    func menuWillOpen(_ menu: NSMenu) {
+        KeyboardShortcuts.disable(.toggleStickers)
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        KeyboardShortcuts.enable(.toggleStickers)
+    }
+
     // MARK: Menu
 
     private func rebuildMenu() {
@@ -36,8 +47,22 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let newItem = makeItem(L10n.menuNewSticker, action: #selector(newSticker), key: "\r")
         newItem.keyEquivalentModifierMask = [.command, .option]
         menu.addItem(newItem)
-        menu.addItem(makeItem(L10n.menuToggleAll, action: #selector(toggleStickers)))
-        // History arrives in stage 2.
+        // The quick way to get stickers out of sight, e.g. before sharing the screen.
+        // Shows the hotkey once the user has assigned one.
+        let toggleItem = makeItem(L10n.menuToggleAll, action: #selector(toggleStickers))
+        toggleItem.setShortcut(for: .toggleStickers)
+        menu.addItem(toggleItem)
+        menu.addItem(makeItem(
+            L10n.menuPeelAll,
+            action: #selector(peelAllStickers),
+            enabled: !environment.stickers.controllers.isEmpty
+        ))
+        // The way back until history arrives in stage 2.
+        menu.addItem(makeItem(
+            L10n.menuRestoreLast,
+            action: #selector(restoreLastPeeled),
+            enabled: environment.stickers.canRestoreLastPeeled
+        ))
         menu.addItem(makeItem(L10n.menuHistory, action: nil, enabled: false))
 
         menu.addItem(.separator())
@@ -99,6 +124,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     @objc private func toggleStickers() {
         environment.stickers.toggleStickersHidden()
+    }
+
+    @objc private func peelAllStickers() {
+        environment.stickers.peelAll()
+    }
+
+    @objc private func restoreLastPeeled() {
+        environment.stickers.restoreLastPeeled()
     }
 
     @objc private func pickDisplay(_ sender: NSMenuItem) {

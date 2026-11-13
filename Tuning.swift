@@ -61,6 +61,20 @@ final class Tuning {
     var hintMaxShows: Int = 5
     var hintDuration: Double = 2.5
 
+    // MARK: Appearing, peeling, theme change, toast (6.7)
+
+    var appearDuration: Double = 0.200
+    var appearStartScale: Double = 0.96
+    var peelDuration: Double = 0.240
+    var peelEndScale: Double = 0.3
+    /// With "Reduce motion" on, movement is replaced by a fade of this length.
+    var reducedMotionFade: Double = 0.150
+    var themeTransitionDuration: Double = 0.250
+    var toastDuration: Double = 4.0
+    var toastInDuration: Double = 0.200
+    var toastOutDuration: Double = 0.150
+    var toastShift: Double = 8
+
     // MARK: Shadows (6.2) — CSS-like: y offset, blur, opacity
 
     var restShadowOffset: Double = 1
@@ -83,6 +97,17 @@ final class Tuning {
     var fullscreenUsesWindowLevel = false
     /// Kind of the line created by Return after the title: a task (on) or plain text (off).
     var newLineAfterTitleIsTodo = true
+    /// On: keyboard focus goes back through an invisible helper panel and the sticker
+    /// never leaves the screen. Off: the first implementation, which hides and shows
+    /// the sticker and makes it blink.
+    var focusReturnUsesHelperPanel = true
+    /// Off (spec 5.1): `.stationary`. On: `.transient`, which floats across Spaces
+    /// and is hidden in Mission Control. For comparing how stickers behave when
+    /// the desktop changes.
+    var spacesBehaviorTransient = false
+    /// On (spec 4.10): ⌘Z brings a peeled sticker back while its toast is up. The
+    /// key is taken from the app in front for those few seconds, or until the next click.
+    var undoPeelUsesCommandZ = true
 
     // MARK: Animation (6.7)
 
