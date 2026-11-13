@@ -65,6 +65,38 @@ jobs:
             -derivedDataPath build/DerivedData \
             -quiet 2>&1 | tee test.log
 
+      # Launches the app, types a sticker through the real editor and checks what was saved.
+      - name: Self-check
+        if: ${{ steps.build.outcome == 'success' }}
+        run: |
+          mkdir -p self-check
+          APP=build/DerivedData/Build/Products/Debug/Stickflow.app/Contents/MacOS/Stickflow
+          "$APP" --self-check "$PWD/self-check" &
+          APP_PID=$!
+          ( sleep 90; kill -9 "$APP_PID" 2>/dev/null ) &
+          wait "$APP_PID"
+
+      - name: Upload self-check snapshots
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: self-check
+          path: |
+            self-check/*.png
+            self-check/report.txt
+          retention-days: 14
+
+      # Only for commits tagged [snapshots]: prints the PNGs as text so they can be read from the log.
+      - name: Print snapshots
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && contains(github.event.head_commit.message, '[snapshots]') }}
+        run: |
+          for file in self-check/*.png; do
+            [ -f "$file" ] || continue
+            echo "-----BEGIN $(basename "$file")-----"
+            base64 -b 160 -i "$file"
+            echo "-----END $(basename "$file")-----"
+          done
+
       - name: Package debug build
         if: ${{ steps.build.outcome == 'success' }}
         run: |

@@ -12,6 +12,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let environment = try AppEnvironment()
             self.environment = environment
             environment.start()
+            #if DEBUG
+            if let output = SelfCheck.outputDirectory {
+                SelfCheck.run(in: environment, output: output)
+            }
+            #endif
         } catch {
             // Without storage there is nothing useful the app can do.
             AppEnvironment.presentAlert(title: L10n.errorDatabaseTitle, error: error)

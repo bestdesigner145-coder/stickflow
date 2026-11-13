@@ -23,7 +23,13 @@ final class AppEnvironment {
     #endif
 
     init() throws {
-        let database = try AppDatabase.onDisk(at: AppDatabase.defaultURL())
+        #if DEBUG
+        // The CI self-check works on its own database and never touches real stickers.
+        let databaseURL = try SelfCheck.prepareDatabaseURL() ?? AppDatabase.defaultURL()
+        #else
+        let databaseURL = try AppDatabase.defaultURL()
+        #endif
+        let database = try AppDatabase.onDisk(at: databaseURL)
         repository = StickerRepository(database: database)
         stickers = StickerManager(
             tuning: tuning,
@@ -64,6 +70,13 @@ final class AppEnvironment {
     }
 
     static func presentAlert(title: String, error: Error) {
+        #if DEBUG
+        if SelfCheck.isActive {
+            // A modal alert would hang an unattended run.
+            print("ALERT  \(title): \(error)")
+            exit(2)
+        }
+        #endif
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = title
