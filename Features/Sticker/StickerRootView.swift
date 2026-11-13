@@ -62,6 +62,12 @@ final class StickerRootView: NSView {
     private let menuButton = ChromeButton(frame: .zero)
     private var trackingArea: NSTrackingArea?
     private var isOverflowing = false
+    private var hasCounter = false
+
+    /// Strip at the bottom of an over-long sticker that holds the "4 more" label.
+    private static let overflowFooterHeight: CGFloat = 16
+    /// Height over which the last visible lines fade into the paper.
+    private static let overflowFadeHeight: CGFloat = 28
 
     /// While editing, the text view handles its own mouse events.
     var isEditing = false {
@@ -113,6 +119,15 @@ final class StickerRootView: NSView {
         addSubview(counterLabel)
         addSubview(menuButton)
 
+        // The counter sits on the title line, so it has to follow the text when it scrolls.
+        scrollView.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(textDidScroll(_:)),
+            name: NSView.boundsDidChangeNotification,
+            object: scrollView.contentView
+        )
+
         setBaseFontSize(14)
         relayout()
     }
@@ -162,8 +177,10 @@ final class StickerRootView: NSView {
         fillView.stripHeight = metrics.stripHeight
         fillView.frame = paper
 
+        // At rest an over-long sticker keeps a footer for the "4 more" label.
+        let footerHeight = isOverflowing && !isEditing ? Self.overflowFooterHeight : 0
         let textTop = paper.minY + metrics.stripHeight
-        let textHeight = max(paper.height - metrics.stripHeight - metrics.bottomPadding, 0)
+        let textHeight = max(paper.height - metrics.stripHeight - metrics.bottomPadding - footerHeight, 0)
         scrollView.frame = NSRect(x: paper.minX, y: textTop, width: paper.width, height: textHeight)
 
         // Autoresizing moves the text view by a delta; pin its width to the visible width explicitly.
@@ -174,12 +191,16 @@ final class StickerRootView: NSView {
 
         menuButton.frame = NSRect(x: paper.maxX - 28, y: paper.minY, width: 24, height: metrics.stripHeight)
 
-        let fadeHeight = min(36, paper.height / 2)
+        // The fade starts over the last visible lines and stays solid down to the paper's edge.
+        let fadeHeight = min(Self.overflowFadeHeight, textHeight / 2)
+        let fadeTop = textTop + textHeight - fadeHeight
+        overflowFade.gradientHeight = fadeHeight
+        overflowFade.cornerRadius = max(metrics.cornerRadius - 0.5, 0)
         overflowFade.frame = NSRect(
-            x: paper.minX + 1,
-            y: paper.maxY - fadeHeight - 1,
-            width: paper.width - 2,
-            height: fadeHeight
+            x: paper.minX + 0.5,
+            y: fadeTop,
+            width: paper.width - 1,
+            height: max(paper.maxY - 0.5 - fadeTop, 0)
         )
         layoutLabels()
     }
@@ -188,23 +209,31 @@ final class StickerRootView: NSView {
         let paper = paperRect
         let inset = BlockTextView.contentInset
 
+        // While editing a long sticker the text scrolls; the counter moves with the title
+        // and hides once the title is out of sight.
+        let scrollOffset = isEditing ? max(scrollView.contentView.bounds.origin.y, 0) : 0
         counterLabel.sizeToFit()
         let counterSize = counterLabel.frame.size
         counterLabel.frame = NSRect(
             x: paper.maxX - inset.width - counterSize.width,
-            y: paper.minY + metrics.stripHeight + inset.height + 2,
+            y: paper.minY + metrics.stripHeight + inset.height + 2 - scrollOffset,
             width: counterSize.width,
             height: counterSize.height
         )
+        counterLabel.isHidden = !hasCounter || scrollOffset > 4
 
         moreLabel.sizeToFit()
         let moreSize = moreLabel.frame.size
         moreLabel.frame = NSRect(
             x: paper.minX + inset.width,
-            y: paper.maxY - moreSize.height - 5,
+            y: paper.maxY - moreSize.height - 6,
             width: moreSize.width,
             height: moreSize.height
         )
+    }
+
+    @objc private func textDidScroll(_ notification: Notification) {
+        layoutLabels()
     }
 
     /// Height the paper needs to show all of its text at the given paper width.
@@ -226,7 +255,7 @@ final class StickerRootView: NSView {
 
     /// Updates the "3/5" counter and returns the space to keep free at the end of the title line.
     func setCounter(_ count: TaskCount) -> CGFloat {
-        counterLabel.isHidden = !count.hasTasks
+        hasCounter = count.hasTasks
         counterLabel.stringValue = count.hasTasks ? count.label : ""
         layoutLabels()
         return count.hasTasks ? counterLabel.frame.width + 8 : 0
@@ -242,6 +271,7 @@ final class StickerRootView: NSView {
         let showsFade = isOverflowing && !isEditing
         scrollView.hasVerticalScroller = isOverflowing && isEditing
         overflowFade.isHidden = !showsFade
+        relayout() // the footer appears or disappears
         guard showsFade else {
             moreLabel.isHidden = true
             return

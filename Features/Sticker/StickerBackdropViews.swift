@@ -163,10 +163,26 @@ final class PaperFillView: NSView {
     }
 }
 
-/// Fades the bottom of an over-long sticker into the paper colour (spec 4.6).
+/// Covers the bottom of an over-long sticker (spec 4.6): the last visible lines
+/// fade into the paper colour, and below them the paper is solid so the
+/// "4 more" label has a clean background.
 final class OverflowFadeView: NSView {
     var paperColor: NSColor = .clear {
         didSet { needsDisplay = true }
+    }
+
+    /// Height of the gradient at the top of the view; the rest is filled solid.
+    var gradientHeight: CGFloat = 28 {
+        didSet {
+            if gradientHeight != oldValue { needsDisplay = true }
+        }
+    }
+
+    /// Radius of the two bottom corners, to follow the paper's shape.
+    var cornerRadius: CGFloat = 0 {
+        didSet {
+            if cornerRadius != oldValue { needsDisplay = true }
+        }
     }
 
     override var isFlipped: Bool { true }
@@ -174,14 +190,29 @@ final class OverflowFadeView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     override func draw(_ dirtyRect: NSRect) {
-        guard let gradient = NSGradient(
-            starting: paperColor.withAlphaComponent(0),
-            ending: paperColor
-        ) else { return }
-        // Flipped view: minY is the top, so the fade goes from transparent (top) to paper (bottom).
+        // Flipped view: y = 0 is the top.
+        let split = min(max(gradientHeight, 0), bounds.height)
+        // Extending the shape upwards keeps the top corners square and rounds only the bottom ones.
+        let shape = NSRect(x: 0, y: -cornerRadius, width: bounds.width, height: bounds.height + cornerRadius)
+
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+
+        // `NSGradient.draw(from:to:)` paints the whole clip region, and views do not
+        // clip to their bounds by default, so the clip has to be set explicitly.
+        NSBezierPath(rect: bounds).addClip()
+        NSBezierPath(roundedRect: shape, xRadius: cornerRadius, yRadius: cornerRadius).addClip()
+
+        paperColor.setFill()
+        NSBezierPath(rect: NSRect(x: 0, y: split, width: bounds.width, height: bounds.height - split)).fill()
+
+        guard split > 0,
+              let gradient = NSGradient(starting: paperColor.withAlphaComponent(0), ending: paperColor)
+        else { return }
+        NSBezierPath(rect: NSRect(x: 0, y: 0, width: bounds.width, height: split)).addClip()
         gradient.draw(
-            from: NSPoint(x: bounds.midX, y: bounds.minY),
-            to: NSPoint(x: bounds.midX, y: bounds.maxY),
+            from: NSPoint(x: bounds.midX, y: 0),
+            to: NSPoint(x: bounds.midX, y: split),
             options: []
         )
     }

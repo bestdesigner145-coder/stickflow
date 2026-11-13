@@ -70,6 +70,8 @@ jobs:
         if: ${{ steps.build.outcome == 'success' }}
         run: |
           mkdir -p self-check
+          # Another app in the foreground, to check that stickers do not steal focus from it.
+          open -a TextEdit && sleep 4
           APP=build/DerivedData/Build/Products/Debug/Stickflow.app/Contents/MacOS/Stickflow
           "$APP" --self-check "$PWD/self-check" &
           APP_PID=$!

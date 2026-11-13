@@ -96,6 +96,9 @@ enum SelfCheck {
             }
 
             // 1. Quick input creates a sticker and starts editing it.
+            let ownBundleID = Bundle.main.bundleIdentifier
+            let frontBefore = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+            note("frontmost app before: \(frontBefore ?? "none"), Stickflow active: \(NSApp.isActive)")
             stickers.createSticker()
             await pause(0.4)
             guard let controller = stickers.controllers.last else {
@@ -105,7 +108,11 @@ enum SelfCheck {
             let textView = controller.rootView.textView
             check(controller.mode == .editing, "a new sticker starts in editing")
             check(controller.panel.isKeyWindow, "the panel has keyboard focus while editing")
-            note("app is active while editing: \(NSApp.isActive)")
+            let frontWhileEditing = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+            note("frontmost app while editing: \(frontWhileEditing ?? "none"), Stickflow active: \(NSApp.isActive)")
+            if let frontBefore, frontBefore != ownBundleID {
+                check(frontWhileEditing == frontBefore, "editing does not take the other app out of the foreground")
+            }
 
             if let screen = environment.displays.menuBarScreen {
                 let visible = screen.visibleFrame
@@ -151,6 +158,11 @@ enum SelfCheck {
             check(!controller.panel.isKeyWindow, "the panel gives keyboard focus back")
             check(controller.panel.ignoresMouseEvents, "at rest the panel ignores the mouse")
             check(controller.panel.isVisible, "the sticker stays on screen after editing")
+            let frontAfter = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+            note("frontmost app after editing: \(frontAfter ?? "none"), Stickflow active: \(NSApp.isActive)")
+            if let frontBefore, frontBefore != ownBundleID {
+                check(frontAfter == frontBefore, "after editing the other app is still in the foreground")
+            }
 
             let expected: [(kind: Block.Kind, text: String, indent: Int, done: Bool)] = [
                 (.heading2, "Кошелёк", 0, false),
@@ -225,8 +237,18 @@ enum SelfCheck {
             await pause(0.7) // debounced save
             check(controller.sticker.taskCount == TaskCount(done: 2, total: 3), "ticking a task updates the counter (\(controller.sticker.taskCount.label))")
             do {
-                let saved = try environment.repository.sticker(id: controller.sticker.id)
-                check(saved == controller.sticker, "the database holds the same sticker as the screen")
+                let live = controller.sticker
+                if let saved = try environment.repository.sticker(id: live.id) {
+                    check(saved.title == live.title, "stored title matches")
+                    check(saved.blocks == live.blocks, "stored blocks match, completion dates included")
+                    check(saved.status == live.status && saved.color == live.color && saved.source == live.source, "stored status, colour and source match")
+                    check(saved.placement == live.placement, "stored placement matches (\(String(describing: saved.placement)) vs \(String(describing: live.placement)))")
+                    // The database keeps dates with millisecond precision.
+                    let drift = abs(saved.updatedAt.timeIntervalSince(live.updatedAt))
+                    check(drift < 0.002, "stored modification date matches within 2 ms (drift \(drift))")
+                } else {
+                    check(false, "the sticker is in the database")
+                }
             } catch {
                 check(false, "the sticker can be read back (\(error))")
             }
@@ -270,6 +292,14 @@ enum SelfCheck {
                 let area = controller.panel.frame.union(stickers.controllers.last?.panel.frame ?? controller.panel.frame)
                 let captured = captureScreen(area, on: screen, name: "7-screen")
                 note("screen capture written: \(captured)")
+
+                // The same area with "hide from screen sharing" on, to see what this macOS does with it.
+                environment.preferences.hideFromScreenSharing = true
+                stickers.applyPreferences()
+                await pause(0.4)
+                _ = captureScreen(area, on: screen, name: "8-screen-hidden")
+                environment.preferences.hideFromScreenSharing = false
+                stickers.applyPreferences()
             }
 
             // 10. Persistence and peeling.
@@ -286,8 +316,8 @@ enum SelfCheck {
 
         // MARK: Snapshots
 
-        /// Renders the sticker's layer tree. The behind-window blur is not part of
-        /// it, so the paper looks more transparent than on a real screen.
+        /// Renders the sticker's view tree. The behind-window blur and the window
+        /// alpha are not part of it; the screen capture at the end shows those.
         func snapshot(_ controller: StickerController, name: String) {
             let view = controller.rootView
             view.layoutSubtreeIfNeeded()
@@ -295,33 +325,8 @@ enum SelfCheck {
 
             if let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
                 view.cacheDisplay(in: view.bounds, to: rep)
-                write(rep, name: "\(name)-view")
+                write(rep, name: name)
             }
-
-            let scale = view.window?.backingScaleFactor ?? 2
-            let width = Int(view.bounds.width * scale)
-            let height = Int(view.bounds.height * scale)
-            guard width > 0, height > 0, let layer = view.layer,
-                  let rep = NSBitmapImageRep(
-                      bitmapDataPlanes: nil,
-                      pixelsWide: width,
-                      pixelsHigh: height,
-                      bitsPerSample: 8,
-                      samplesPerPixel: 4,
-                      hasAlpha: true,
-                      isPlanar: false,
-                      colorSpaceName: .deviceRGB,
-                      bytesPerRow: 0,
-                      bitsPerPixel: 0
-                  ),
-                  let context = NSGraphicsContext(bitmapImageRep: rep)
-            else { return }
-            // A neutral backdrop instead of the desktop, so translucency is visible.
-            context.cgContext.setFillColor(NSColor(white: 0.55, alpha: 1).cgColor)
-            context.cgContext.fill(CGRect(x: 0, y: 0, width: width, height: height))
-            context.cgContext.scaleBy(x: scale, y: scale)
-            layer.render(in: context.cgContext)
-            write(rep, name: "\(name)-layer")
         }
 
         private func write(_ rep: NSBitmapImageRep, name: String) {
