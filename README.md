@@ -27,8 +27,12 @@ The Xcode project is generated from `project.yml` and is not committed. Run `xco
 
 ```sh
 swift test --package-path StickflowCore   # models, editor rules, geometry
-xcodebuild test -project Stickflow.xcodeproj -scheme Stickflow -destination 'platform=macOS'   # storage
+xcodebuild test -project Stickflow.xcodeproj -scheme StickflowStoreTests -destination 'platform=macOS'   # storage
 ```
+
+A debug build can also check itself: `Stickflow --self-check <folder>` creates stickers through the real editor, verifies what was saved and writes snapshots into the folder. It uses its own database. CI runs it on every push.
+
+Отладочная сборка умеет проверять сама себя: `Stickflow --self-check <папка>` создаёт стикеры через настоящий редактор, сверяет сохранённое и кладёт снимки в папку. База у проверки своя. CI запускает её при каждом пуше.
 
 ## Layout · Структура
 

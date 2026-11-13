@@ -18,9 +18,14 @@ env:
 
 jobs:
   build:
-    name: Build and test
-    runs-on: macos-26
+    name: Build and test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-26 ships Xcode 26, macos-15 ships Xcode 16: the oldest toolchain the README promises.
+        os: [macos-26, macos-15]
     steps:
       - uses: actions/checkout@v4
 
@@ -82,7 +87,7 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
-          name: self-check
+          name: self-check-${{ matrix.os }}
           path: |
             self-check/*.png
             self-check/report.txt
@@ -110,6 +115,6 @@ jobs:
         if: ${{ steps.build.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
-          name: Stickflow-debug
+          name: Stickflow-debug-${{ matrix.os }}
           path: Stickflow-debug.zip
           retention-days: 14
