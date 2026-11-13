@@ -57,6 +57,13 @@ final class BlockTextView: NSTextView {
     private let uppercaseGenerator = UppercaseGlyphGenerator()
     private var isApplyingShortcut = false
 
+    /// Keys pressed since the caret stood at the start of the line, by their place
+    /// on the keyboard. This is how "[] " makes a task on a layout where those keys
+    /// type letters (Russian: "хъ "). Empty as soon as anything else happens.
+    private var keysSinceLineStart: [PhysicalKey] = []
+    /// Start of the line `keysSinceLineStart` belongs to.
+    private var keyTrackingLineStart = 0
+
     // MARK: Construction
 
     /// Creates the text view inside a scroll view, on an explicit TextKit 1 stack.
@@ -128,6 +135,7 @@ final class BlockTextView: NSTextView {
     // MARK: Content
 
     func load(_ document: EditorDocument) {
+        keysSinceLineStart = []
         metas = document.metas
         textStorage?.setAttributedString(NSAttributedString(string: document.text))
         undoManager?.removeAllActions()
@@ -219,9 +227,20 @@ final class BlockTextView: NSTextView {
 
         let range = ranges[line]
         let text = (string as NSString).substring(with: range)
-        guard let match = BlockShortcut.match(in: text),
-              selection.location == range.location + match.prefixLength
-        else { return }
+        let match: BlockShortcut.Match
+        if let byText = BlockShortcut.match(in: text),
+           selection.location == range.location + byText.prefixLength {
+            match = byText
+        } else if keyTrackingLineStart == range.location,
+                  let byKeys = BlockShortcut.match(physicalKeys: keysSinceLineStart),
+                  selection.location == range.location + byKeys.prefixLength,
+                  byKeys.prefixLength <= range.length {
+            // The same keys on another layout: every key press gave one character.
+            match = byKeys
+        } else {
+            return
+        }
+        keysSinceLineStart = []
 
         let prefix = NSRange(location: range.location, length: match.prefixLength)
         isApplyingShortcut = true
@@ -461,8 +480,35 @@ final class BlockTextView: NSTextView {
             moveCurrentLine(by: 1)
             return
         default:
+            trackPhysicalKey(event.keyCode, flags: flags)
             super.keyDown(with: event)
         }
+    }
+
+    /// Remembers the key for layout-independent shortcuts (see `keysSinceLineStart`).
+    /// The run is kept only while every key since the start of the line added
+    /// exactly one character at the caret.
+    private func trackPhysicalKey(_ keyCode: UInt16, flags: NSEvent.ModifierFlags) {
+        let selection = selectedRange()
+        let line = lineIndex(at: selection.location)
+        let ranges = lineRanges()
+        guard selection.length == 0, line > 0, line < ranges.count,
+              flags.subtracting(.shift).isEmpty, !hasMarkedText()
+        else {
+            keysSinceLineStart = []
+            return
+        }
+        let lineStart = ranges[line].location
+        if selection.location == lineStart {
+            keysSinceLineStart = []
+            keyTrackingLineStart = lineStart
+        } else if keysSinceLineStart.isEmpty
+                    || keyTrackingLineStart != lineStart
+                    || selection.location != lineStart + keysSinceLineStart.count {
+            keysSinceLineStart = []
+            return
+        }
+        keysSinceLineStart.append(PhysicalKey(code: keyCode, shift: flags.contains(.shift)))
     }
 
     /// Stickflow is an agent app without a main menu, so the usual Edit-menu

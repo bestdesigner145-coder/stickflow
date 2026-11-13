@@ -88,6 +88,38 @@ final class ModelTests: XCTestCase {
         XCTAssertNil(BlockShortcut.match(in: "plain"))
     }
 
+    func testShortcutsByPhysicalKeys() {
+        let leftBracket = PhysicalKey(code: 33)
+        let rightBracket = PhysicalKey(code: 30)
+        let x = PhysicalKey(code: 7)
+        let space = PhysicalKey(code: 49)
+        let hash = PhysicalKey(code: 20, shift: true)
+
+        // "[] " — on a Russian layout these keys type "хъ ".
+        XCTAssertEqual(
+            BlockShortcut.match(physicalKeys: [leftBracket, rightBracket, space]),
+            BlockShortcut.Match(kind: .todo, done: false, prefixLength: 3)
+        )
+        XCTAssertEqual(
+            BlockShortcut.match(physicalKeys: [leftBracket, space, rightBracket, space]),
+            BlockShortcut.Match(kind: .todo, done: false, prefixLength: 4)
+        )
+        XCTAssertEqual(
+            BlockShortcut.match(physicalKeys: [leftBracket, x, rightBracket, space]),
+            BlockShortcut.Match(kind: .todo, done: true, prefixLength: 4)
+        )
+
+        // The "#" key is "№" in Russian and "§" in German; "№№ 5–7" is ordinary text.
+        XCTAssertNil(BlockShortcut.match(physicalKeys: [hash, hash, space]))
+        XCTAssertNil(BlockShortcut.match(physicalKeys: [hash, space]))
+        // Shift matters: "{} " is not "[] ".
+        XCTAssertNil(BlockShortcut.match(physicalKeys: [
+            PhysicalKey(code: 33, shift: true), PhysicalKey(code: 30, shift: true), space,
+        ]))
+        XCTAssertNil(BlockShortcut.match(physicalKeys: [leftBracket, rightBracket]))
+        XCTAssertNil(BlockShortcut.match(physicalKeys: []))
+    }
+
     func testLineMetaOperations() {
         var meta = LineMeta(kind: .todo)
         let now = Date(timeIntervalSince1970: 1_800_000_000)

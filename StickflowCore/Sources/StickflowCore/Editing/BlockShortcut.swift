@@ -33,4 +33,66 @@ public enum BlockShortcut {
         }
         return nil
     }
+
+    // MARK: Physical keys
+
+    // Virtual key codes describe a position on the keyboard, not a character.
+    private enum KeyCode {
+        static let leftBracket: UInt16 = 33
+        static let rightBracket: UInt16 = 30
+        static let x: UInt16 = 7
+        static let space: UInt16 = 49
+    }
+
+    // Only the bracket shortcuts: on other layouts these keys give letter runs that
+    // are not words ("хъ " in Russian). "#" is left out on purpose: the same key
+    // types "№" in Russian and "§" in German, and "№№ 5–7" or "§§ 12–15" are
+    // ordinary ways to start a line.
+    private static let physicalTable: [(keys: [PhysicalKey], kind: LineKind, done: Bool)] = [
+        (
+            [
+                PhysicalKey(code: KeyCode.leftBracket), PhysicalKey(code: KeyCode.x),
+                PhysicalKey(code: KeyCode.rightBracket), PhysicalKey(code: KeyCode.space),
+            ],
+            .todo, true
+        ),
+        (
+            [
+                PhysicalKey(code: KeyCode.leftBracket), PhysicalKey(code: KeyCode.space),
+                PhysicalKey(code: KeyCode.rightBracket), PhysicalKey(code: KeyCode.space),
+            ],
+            .todo, false
+        ),
+        (
+            [
+                PhysicalKey(code: KeyCode.leftBracket), PhysicalKey(code: KeyCode.rightBracket),
+                PhysicalKey(code: KeyCode.space),
+            ],
+            .todo, false
+        ),
+    ]
+
+    /// Returns the shortcut spelled by `keys`: the keys pressed since the caret was at
+    /// the start of a line, identified by position. This is how "[] " works on a layout
+    /// where those keys type letters (on a Russian layout they give "хъ ").
+    ///
+    /// `prefixLength` assumes one character per key press.
+    public static func match(physicalKeys keys: [PhysicalKey]) -> Match? {
+        for entry in physicalTable where entry.keys == keys {
+            return Match(kind: entry.kind, done: entry.done, prefixLength: keys.count)
+        }
+        return nil
+    }
+}
+
+/// A key press identified by where the key is, not by what it types.
+public struct PhysicalKey: Equatable, Sendable {
+    /// Virtual key code (`NSEvent.keyCode`).
+    public let code: UInt16
+    public let shift: Bool
+
+    public init(code: UInt16, shift: Bool = false) {
+        self.code = code
+        self.shift = shift
+    }
 }
