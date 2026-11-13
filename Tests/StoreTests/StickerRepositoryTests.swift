@@ -82,6 +82,29 @@ final class StickerRepositoryTests: XCTestCase {
         XCTAssertEqual(try repository.totalCount(), 1, "the row stays for a future sync")
     }
 
+    func testLastPeeledIsTheNewestStickerStillOffScreen() throws {
+        let repository = try makeRepository()
+        XCTAssertNil(try repository.lastPeeled())
+
+        var older = makeSticker(status: .draft)
+        older.peeledAt = moment
+        var newer = makeSticker(status: .done)
+        newer.peeledAt = moment.addingTimeInterval(60)
+        // Peeled once, then put back on screen: no longer a candidate.
+        var restored = makeSticker(status: .active)
+        restored.peeledAt = moment.addingTimeInterval(120)
+        var deleted = makeSticker(status: .draft)
+        deleted.peeledAt = moment.addingTimeInterval(180)
+        deleted.deletedAt = moment.addingTimeInterval(200)
+        let neverPeeled = makeSticker(status: .draft)
+
+        for sticker in [older, newer, restored, deleted, neverPeeled] {
+            try repository.save(sticker)
+        }
+
+        XCTAssertEqual(try repository.lastPeeled()?.id, newer.id)
+    }
+
     func testUnknownEnumValuesFallBackInsteadOfFailing() throws {
         let repository = try makeRepository()
         let sticker = makeSticker()
