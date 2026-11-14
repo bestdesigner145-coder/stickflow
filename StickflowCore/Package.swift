@@ -3,8 +3,8 @@
 
 import PackageDescription
 
-// StickflowCore holds everything that must not depend on AppKit:
-// data models, block-editing rules and geometry. A future iOS app shares it.
+/// StickflowCore holds everything that must not depend on AppKit:
+/// data models, block-editing rules and geometry. A future iOS app shares it.
 let package = Package(
     name: "StickflowCore",
     platforms: [.macOS(.v14), .iOS(.v17)],

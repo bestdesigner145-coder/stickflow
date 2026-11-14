@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 Stickflow contributors
 
-import XCTest
 @testable import StickflowCore
+import XCTest
 
 final class ModelTests: XCTestCase {
     func testTaskCountCountsOnlyTodos() {

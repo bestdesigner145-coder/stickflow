@@ -608,10 +608,10 @@ extension StickerController: StickerRootViewDelegate {
             } else {
                 beginDrag()
             }
-        case .checkbox(let line):
+        case let .checkbox(line):
             // Ticks the task without entering editing (spec 4.6).
             view.textView.toggleDone(line: line)
-        case .body(let pointInTextView):
+        case let .body(pointInTextView):
             beginEditing(at: pointInTextView)
         }
     }

@@ -28,8 +28,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         rebuildMenu()
     }
 
-    // While the menu is open its item reacts to the hotkey itself. The global
-    // hotkey would fire a second time when the menu closes and undo the action.
+    /// While the menu is open its item reacts to the hotkey itself. The global
+    /// hotkey would fire a second time when the menu closes and undo the action.
     func menuWillOpen(_ menu: NSMenu) {
         KeyboardShortcuts.disable(.toggleStickers)
     }

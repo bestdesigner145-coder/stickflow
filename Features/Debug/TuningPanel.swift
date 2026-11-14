@@ -4,8 +4,8 @@
 #if DEBUG
 import AppKit
 import KeyboardShortcuts
-import SwiftUI
 import StickflowCore
+import SwiftUI
 
 /// Debug-only window with sliders for the key `Tuning` values (spec rule 0.2)
 /// and, until the settings window exists (stage 4), the user settings too.

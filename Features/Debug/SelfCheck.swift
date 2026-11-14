@@ -2,6 +2,9 @@
 // Copyright (C) 2026 Stickflow contributors
 
 #if DEBUG
+// The self-check is one long scripted scenario with wordy check labels;
+// the size and length limits are for product code.
+// swiftlint:disable function_body_length cyclomatic_complexity large_tuple line_length
 import AppKit
 import StickflowCore
 
@@ -192,7 +195,7 @@ enum SelfCheck {
             var hitLines = Set<Int>()
             var y = paperRect.minY
             while y < paperRect.maxY {
-                if case .checkbox(let line) = controller.rootView.zone(at: NSPoint(x: paperRect.minX + 18, y: y)) {
+                if case let .checkbox(line) = controller.rootView.zone(at: NSPoint(x: paperRect.minX + 18, y: y)) {
                     hitLines.insert(line)
                 }
                 y += 2
@@ -299,7 +302,7 @@ enum SelfCheck {
                 check(scrolled && long.rootView.scrollOffset > 40, "with the edit key a long sticker scrolls without a click (offset \(long.rootView.scrollOffset))")
                 await pause(0.2)
                 snapshot(long, name: "6b-long-scrolled")
-                long.rootView.scrollText(by: 10_000)
+                long.rootView.scrollText(by: 10000)
                 note("long sticker scrolled to the end: offset \(long.rootView.scrollOffset)")
                 await pause(0.2)
                 snapshot(long, name: "6c-long-scrolled-end")
@@ -331,12 +334,12 @@ enum SelfCheck {
             let firstID = controller.sticker.id
             let firstFrame = controller.paperFrame
             do {
-                check(try environment.repository.stickers(status: .active).count == 2, "two active stickers are stored")
+                try check(environment.repository.stickers(status: .active).count == 2, "two active stickers are stored")
                 check(!stickers.canRestoreLastPeeled, "nothing to restore before the first peel")
                 stickers.peel(controller)
-                check(try environment.repository.stickers(status: .active).count == 1, "peeling removes the sticker from the active list")
-                check(try environment.repository.stickers(status: .draft).count == 1, "a peeled sticker with open tasks becomes a draft")
-                check(try environment.repository.lastPeeled()?.id == firstID, "the peeled sticker is stored with the time it was peeled")
+                try check(environment.repository.stickers(status: .active).count == 1, "peeling removes the sticker from the active list")
+                try check(environment.repository.stickers(status: .draft).count == 1, "a peeled sticker with open tasks becomes a draft")
+                try check(environment.repository.lastPeeled()?.id == firstID, "the peeled sticker is stored with the time it was peeled")
                 check(stickers.controllers.count == 1, "the peeled sticker is off the list at once")
                 check(stickers.isUndoToastVisible, "peeling shows the toast")
                 check(stickers.canRestoreLastPeeled, "the menu bar can restore the last peeled sticker")
@@ -362,13 +365,13 @@ enum SelfCheck {
                     check(false, "Restore in the toast brings the sticker back")
                 }
                 check(!stickers.isUndoToastVisible, "the toast goes away after Restore")
-                check(try environment.repository.stickers(status: .active).count == 2, "both stickers are active again")
+                try check(environment.repository.stickers(status: .active).count == 2, "both stickers are active again")
                 check(!stickers.canRestoreLastPeeled, "nothing is left to restore")
 
                 // One action takes everything off, one toast brings everything back.
                 stickers.peelAll()
                 check(stickers.controllers.isEmpty, "“Peel off all” takes every sticker off")
-                check(try environment.repository.stickers(status: .active).isEmpty, "no sticker stays active after “Peel off all”")
+                try check(environment.repository.stickers(status: .active).isEmpty, "no sticker stays active after “Peel off all”")
                 await pause(0.4)
                 snapshotToast(name: "10-toast-all")
                 stickers.undoLastPeel()
@@ -497,4 +500,5 @@ enum SelfCheck {
         }
     }
 }
+// swiftlint:enable function_body_length cyclomatic_complexity large_tuple line_length
 #endif

@@ -17,8 +17,47 @@ env:
   HOMEBREW_NO_INSTALL_CLEANUP: "1"
 
 jobs:
+  # Spec 17.3, stage 1: lint. Nothing else runs until it passes.
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SWIFTFORMAT_VERSION: "0.64.7"
+      SWIFTLINT_VERSION: "0.65.1"
+      GITLEAKS_VERSION: "8.30.0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # gitleaks reads the whole history
+
+      - name: Install linters
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin" && cd "$RUNNER_TEMP"
+          curl -sSfL -o swiftformat.zip "https://github.com/nicklockwood/SwiftFormat/releases/download/$SWIFTFORMAT_VERSION/swiftformat_linux.zip"
+          curl -sSfL -o swiftlint.zip "https://github.com/realm/SwiftLint/releases/download/$SWIFTLINT_VERSION/swiftlint_linux_amd64.zip"
+          curl -sSfL -o gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v$GITLEAKS_VERSION/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          unzip -oq swiftformat.zip && mv swiftformat_linux bin/swiftformat
+          unzip -oq swiftlint.zip swiftlint-static && mv swiftlint-static bin/swiftlint
+          tar xzf gitleaks.tgz gitleaks && mv gitleaks bin/gitleaks
+          chmod +x bin/*
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: SwiftFormat
+        run: swiftformat --lint .
+
+      - name: SwiftLint
+        run: swiftlint lint --strict
+
+      - name: Secrets
+        run: gitleaks detect --redact --no-banner
+
+      - name: Localization
+        run: python3 scripts/check-localization.py
+
   build:
     name: Build and test (${{ matrix.os }})
+    needs: lint
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -35,19 +74,21 @@ jobs:
           xcodebuild -version
           swift --version
 
-      # Later steps run even if an earlier one failed, so one run reports every problem.
+      # The stages follow spec 17.3; the first failure stops the rest.
       - name: StickflowCore tests
-        run: swift test --package-path StickflowCore
+        run: swift test --package-path StickflowCore --enable-code-coverage -Xswiftc -warnings-as-errors
+
+      - name: StickflowCore coverage
+        run: python3 scripts/check-coverage.py "$(swift test --package-path StickflowCore --show-codecov-path)" 90
 
       - name: Generate Xcode project
-        if: ${{ !cancelled() }}
         run: |
           which xcodegen || brew install xcodegen
           xcodegen generate
 
-      - name: Build app
+      # Warnings are errors in both configurations (project.yml).
+      - name: Build app (Debug)
         id: build
-        if: ${{ !cancelled() }}
         run: |
           set -o pipefail
           xcodebuild build \
@@ -58,8 +99,19 @@ jobs:
             -derivedDataPath build/DerivedData \
             -quiet 2>&1 | tee build.log
 
+      - name: Build app (Release)
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project Stickflow.xcodeproj \
+            -scheme Stickflow \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -derivedDataPath build/DerivedData \
+            ONLY_ACTIVE_ARCH=YES \
+            -quiet 2>&1 | tee build-release.log
+
       - name: Store tests
-        if: ${{ !cancelled() }}
         run: |
           set -o pipefail
           xcodebuild test \
@@ -72,7 +124,6 @@ jobs:
 
       # Launches the app, types a sticker through the real editor and checks what was saved.
       - name: Self-check
-        if: ${{ steps.build.outcome == 'success' }}
         run: |
           mkdir -p self-check
           # Another app in the foreground, to check that stickers do not steal focus from it.
@@ -104,15 +155,16 @@ jobs:
             echo "-----END $(basename "$file")-----"
           done
 
+      # The PR build of spec 17.1: download, unzip, run.
       - name: Package debug build
-        if: ${{ steps.build.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
           ditto -c -k --keepParent \
             build/DerivedData/Build/Products/Debug/Stickflow.app \
             Stickflow-debug.zip
 
       - name: Upload debug build
-        if: ${{ steps.build.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: Stickflow-debug-${{ matrix.os }}

@@ -12,7 +12,7 @@ public enum BlockShortcut {
         public let prefixLength: Int
     }
 
-    // Longer prefixes come first so "[x] " is not mistaken for something shorter.
+    /// Longer prefixes come first so "[x] " is not mistaken for something shorter.
     private static let table: [(prefix: String, kind: LineKind, done: Bool)] = [
         ("[x] ", .todo, true),
         ("[X] ", .todo, true),
@@ -39,7 +39,7 @@ public enum BlockShortcut {
 
     // MARK: Physical keys
 
-    // Virtual key codes describe a position on the keyboard, not a character.
+    /// Virtual key codes describe a position on the keyboard, not a character.
     private enum KeyCode {
         static let leftBracket: UInt16 = 33
         static let rightBracket: UInt16 = 30
@@ -47,10 +47,10 @@ public enum BlockShortcut {
         static let space: UInt16 = 49
     }
 
-    // Only the bracket shortcuts: on other layouts these keys give letter runs that
-    // are not words ("хъ " in Russian). "#" is not matched by position: the same
-    // key types "§" in German, and "§§ 12–15" is an ordinary way to start a line.
-    // Russian "№№ " is in the text table above, by the author's decision.
+    /// Only the bracket shortcuts: on other layouts these keys give letter runs that
+    /// are not words ("хъ " in Russian). "#" is not matched by position: the same
+    /// key types "§" in German, and "§§ 12–15" is an ordinary way to start a line.
+    /// Russian "№№ " is in the text table above, by the author's decision.
     private static let physicalTable: [(keys: [PhysicalKey], kind: LineKind, done: Bool)] = [
         (
             [

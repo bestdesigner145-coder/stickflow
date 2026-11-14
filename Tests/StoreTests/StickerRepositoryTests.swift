@@ -9,7 +9,7 @@ final class StickerRepositoryTests: XCTestCase {
     private let moment = Date(timeIntervalSince1970: 1_800_000_000)
 
     private func makeRepository() throws -> StickerRepository {
-        StickerRepository(database: try AppDatabase.inMemory())
+        try StickerRepository(database: AppDatabase.inMemory())
     }
 
     private func makeSticker(status: Sticker.Status = .active, createdAt: Date? = nil) -> Sticker {

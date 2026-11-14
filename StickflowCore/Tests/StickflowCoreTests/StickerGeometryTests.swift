@@ -2,8 +2,8 @@
 // Copyright (C) 2026 Stickflow contributors
 
 import CoreGraphics
-import XCTest
 @testable import StickflowCore
+import XCTest
 
 final class StickerGeometryTests: XCTestCase {
     private let screen = CGRect(x: 0, y: 0, width: 1440, height: 875)

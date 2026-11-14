@@ -1,0 +1,15 @@
+# SwiftFormat configuration (spec 17.3). Run `swiftformat .` before pushing.
+--swiftversion 6.0
+--indent 4
+--maxwidth none
+--wraparguments preserve
+--wrapparameters preserve
+--wrapcollections preserve
+--stripunusedargs closure-only
+--ifdef no-indent
+--exclude build,.build,StickflowCore/.build,DerivedData
+--ranges no-space
+# Short bodies stay on one line. Key paths to main-actor properties do not compile in
+# Swift 6. An explicit `self.` is kept where a local constant shadows a member.
+--disable wrapPropertyBodies,wrapFunctionBodies,wrapIfStatementBodies,conditionalAssignment
+--disable preferKeyPath,trailingClosures,redundantSelf,wrapMultilineStatementBraces,repeatedGuard

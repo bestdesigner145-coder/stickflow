@@ -189,7 +189,7 @@ final class StickerManager: NSObject {
         pointer.kick()
         guard let first = peeled.first,
               let screen = displays.screen(containing: first.paperFrame)
-                ?? displays.stickerScreen(preferredUUID: preferences.stickerDisplayUUID)
+              ?? displays.stickerScreen(preferredUUID: preferences.stickerDisplayUUID)
         else { return }
         let message = peeled.count == 1 ? L10n.toastPeeledOne : L10n.toastPeeledMany(peeled.count)
         toast.show(message: message, actionTitle: L10n.toastRestore, on: screen, tuning: tuning) { [weak self] in

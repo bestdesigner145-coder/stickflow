@@ -503,8 +503,8 @@ final class BlockTextView: NSTextView {
             keysSinceLineStart = []
             keyTrackingLineStart = lineStart
         } else if keysSinceLineStart.isEmpty
-                    || keyTrackingLineStart != lineStart
-                    || selection.location != lineStart + keysSinceLineStart.count {
+            || keyTrackingLineStart != lineStart
+            || selection.location != lineStart + keysSinceLineStart.count {
             keysSinceLineStart = []
             return
         }
