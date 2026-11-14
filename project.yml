@@ -1,0 +1,117 @@
+# Xcode project definition. Generate the project with:
+#   brew install xcodegen && xcodegen generate
+name: Stickflow
+
+options:
+  deploymentTarget:
+    macOS: "14.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+  groupSortPosition: top
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # Bundle ID is permanent: permissions, settings and updates are tied to it.
+    STICKFLOW_BUNDLE_ID: io.github.stickflow
+    # Warnings are errors in every configuration (spec 17.3).
+    SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
+    GCC_TREAT_WARNINGS_AS_ERRORS: YES
+    # Local and CI builds are signed ad hoc. Release signing arrives in stage 4.
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+    ENABLE_HARDENED_RUNTIME: NO
+    DEAD_CODE_STRIPPING: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    # String keys are maintained by hand in Localizable.xcstrings.
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+    SWIFT_EMIT_LOC_STRINGS: NO
+
+packages:
+  StickflowCore:
+    path: StickflowCore
+  GRDB:
+    url: https://github.com/groue/GRDB.swift
+    from: "7.0.0"
+  KeyboardShortcuts:
+    url: https://github.com/sindresorhus/KeyboardShortcuts
+    from: "2.0.0"
+
+targets:
+  Stickflow:
+    type: application
+    platform: macOS
+    sources:
+      - path: App
+      - path: Features
+      - path: Services
+      - path: Resources
+      - path: Tuning.swift
+    dependencies:
+      - package: StickflowCore
+      - package: GRDB
+      - package: KeyboardShortcuts
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Stickflow
+        CFBundleDevelopmentRegion: $(DEVELOPMENT_LANGUAGE)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+        LSApplicationCategoryType: public.app-category.productivity
+        # Agent app: no Dock icon, lives in the menu bar (spec 5.1).
+        LSUIElement: true
+        NSPrincipalClass: NSApplication
+        NSHumanReadableCopyright: "Stickflow contributors. Free software under GPL-3.0."
+    settings:
+      base:
+        PRODUCT_NAME: Stickflow
+        PRODUCT_BUNDLE_IDENTIFIER: $(STICKFLOW_BUNDLE_ID)
+        COMBINE_HIDPI_IMAGES: YES
+
+  # Storage tests compile the Store sources directly, so they need no host app.
+  StickflowStoreTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Services/Store
+      - path: Tests/StoreTests
+    dependencies:
+      - package: StickflowCore
+      - package: GRDB
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(STICKFLOW_BUNDLE_ID).StoreTests
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  # Run the app; ⌘U also runs the storage tests.
+  Stickflow:
+    build:
+      targets:
+        Stickflow: all
+        StickflowStoreTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - StickflowStoreTests
+    archive:
+      config: Release
+
+  # Storage tests on their own, so CI can run them even when the app does not build.
+  StickflowStoreTests:
+    build:
+      targets:
+        StickflowStoreTests: [test]
+    test:
+      config: Debug
+      targets:
+        - StickflowStoreTests

@@ -1,0 +1,172 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "stage-*"]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: "1"
+  HOMEBREW_NO_INSTALL_CLEANUP: "1"
+
+jobs:
+  # Spec 17.3, stage 1: lint. Nothing else runs until it passes.
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SWIFTFORMAT_VERSION: "0.64.7"
+      SWIFTLINT_VERSION: "0.65.1"
+      GITLEAKS_VERSION: "8.30.0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # gitleaks reads the whole history
+
+      - name: Install linters
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin" && cd "$RUNNER_TEMP"
+          curl -sSfL -o swiftformat.zip "https://github.com/nicklockwood/SwiftFormat/releases/download/$SWIFTFORMAT_VERSION/swiftformat_linux.zip"
+          curl -sSfL -o swiftlint.zip "https://github.com/realm/SwiftLint/releases/download/$SWIFTLINT_VERSION/swiftlint_linux_amd64.zip"
+          curl -sSfL -o gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v$GITLEAKS_VERSION/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          unzip -oq swiftformat.zip && mv swiftformat_linux bin/swiftformat
+          unzip -oq swiftlint.zip swiftlint-static && mv swiftlint-static bin/swiftlint
+          tar xzf gitleaks.tgz gitleaks && mv gitleaks bin/gitleaks
+          chmod +x bin/*
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: SwiftFormat
+        run: swiftformat --lint .
+
+      - name: SwiftLint
+        run: swiftlint lint --strict
+
+      - name: Secrets
+        run: gitleaks detect --redact --no-banner
+
+      - name: Localization
+        run: python3 scripts/check-localization.py
+
+  build:
+    name: Build and test (${{ matrix.os }})
+    needs: lint
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-26 ships Xcode 26, macos-15 ships Xcode 16: the oldest toolchain the README promises.
+        os: [macos-26, macos-15]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+
+      # The stages follow spec 17.3; the first failure stops the rest.
+      - name: StickflowCore tests
+        run: swift test --package-path StickflowCore --enable-code-coverage -Xswiftc -warnings-as-errors
+
+      - name: StickflowCore coverage
+        run: python3 scripts/check-coverage.py "$(swift test --package-path StickflowCore --show-codecov-path)" 90
+
+      - name: Generate Xcode project
+        run: |
+          which xcodegen || brew install xcodegen
+          xcodegen generate
+
+      # Warnings are errors in both configurations (project.yml).
+      - name: Build app (Debug)
+        id: build
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project Stickflow.xcodeproj \
+            -scheme Stickflow \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath build/DerivedData \
+            -quiet 2>&1 | tee build.log
+
+      - name: Build app (Release)
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project Stickflow.xcodeproj \
+            -scheme Stickflow \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -derivedDataPath build/DerivedData \
+            ONLY_ACTIVE_ARCH=YES \
+            -quiet 2>&1 | tee build-release.log
+
+      - name: Store tests
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project Stickflow.xcodeproj \
+            -scheme StickflowStoreTests \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath build/DerivedData \
+            -quiet 2>&1 | tee test.log
+
+      # Launches the app, types a sticker through the real editor and checks what was saved.
+      - name: Self-check
+        run: |
+          mkdir -p self-check
+          # Another app in the foreground, to check that stickers do not steal focus from it.
+          open -a TextEdit && sleep 4
+          APP=build/DerivedData/Build/Products/Debug/Stickflow.app/Contents/MacOS/Stickflow
+          "$APP" --self-check "$PWD/self-check" &
+          APP_PID=$!
+          ( sleep 90; kill -9 "$APP_PID" 2>/dev/null ) &
+          wait "$APP_PID"
+
+      - name: Upload self-check snapshots
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: self-check-${{ matrix.os }}
+          path: |
+            self-check/*.png
+            self-check/report.txt
+          retention-days: 14
+
+      # Only for commits tagged [snapshots]: prints the PNGs as text so they can be read from the log.
+      - name: Print snapshots
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && contains(github.event.head_commit.message, '[snapshots]') }}
+        run: |
+          for file in self-check/*.png; do
+            [ -f "$file" ] || continue
+            echo "-----BEGIN $(basename "$file")-----"
+            base64 -b 160 -i "$file"
+            echo "-----END $(basename "$file")-----"
+          done
+
+      # The PR build of spec 17.1: download, unzip, run.
+      - name: Package debug build
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          ditto -c -k --keepParent \
+            build/DerivedData/Build/Products/Debug/Stickflow.app \
+            Stickflow-debug.zip
+
+      - name: Upload debug build
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Stickflow-debug-${{ matrix.os }}
+          path: Stickflow-debug.zip
+          retention-days: 14
