@@ -92,6 +92,9 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(BlockShortcut.match(in: "[x] milk"), BlockShortcut.Match(kind: .todo, done: true, prefixLength: 4))
         XCTAssertEqual(BlockShortcut.match(in: "## Кошелёк"), BlockShortcut.Match(kind: .heading2, done: false, prefixLength: 3))
         XCTAssertEqual(BlockShortcut.match(in: "# Кошелёк"), BlockShortcut.Match(kind: .heading2, done: false, prefixLength: 2))
+        // "##" typed on a Russian layout.
+        XCTAssertEqual(BlockShortcut.match(in: "№№ Кошелёк"), BlockShortcut.Match(kind: .heading2, done: false, prefixLength: 3))
+        XCTAssertNil(BlockShortcut.match(in: "№ 5 от 12 ноября"))
         XCTAssertEqual(BlockShortcut.match(in: "- item"), BlockShortcut.Match(kind: .bullet, done: false, prefixLength: 2))
         XCTAssertEqual(BlockShortcut.match(in: "* item"), BlockShortcut.Match(kind: .bullet, done: false, prefixLength: 2))
         XCTAssertNil(BlockShortcut.match(in: "-item"))
@@ -119,7 +122,7 @@ final class ModelTests: XCTestCase {
             BlockShortcut.Match(kind: .todo, done: true, prefixLength: 4)
         )
 
-        // The "#" key is "№" in Russian and "§" in German; "№№ 5–7" is ordinary text.
+        // The "#" key is "§" in German; "§§ 12–15" is ordinary text. Not matched by position.
         XCTAssertNil(BlockShortcut.match(physicalKeys: [hash, hash, space]))
         XCTAssertNil(BlockShortcut.match(physicalKeys: [hash, space]))
         // Shift matters: "{} " is not "[] ".

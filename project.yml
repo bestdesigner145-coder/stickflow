@@ -17,7 +17,7 @@ settings:
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
     # Bundle ID is permanent: permissions, settings and updates are tied to it.
-    STICKFLOW_BUNDLE_ID: io.github.stickflow.Stickflow
+    STICKFLOW_BUNDLE_ID: io.github.stickflow
     # Local and CI builds are signed ad hoc. Release signing arrives in stage 4.
     CODE_SIGN_STYLE: Manual
     CODE_SIGN_IDENTITY: "-"

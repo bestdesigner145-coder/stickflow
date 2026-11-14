@@ -21,6 +21,9 @@ public enum BlockShortcut {
         ("[ ] ", .todo, false),
         ("[] ", .todo, false),
         ("## ", .heading2, false),
+        // Shift+3 twice on a Russian layout, where there is no "#". A single "№ "
+        // stays text: "№ 5" is a common way to start a line.
+        ("№№ ", .heading2, false),
         ("# ", .heading2, false),
         ("- ", .bullet, false),
         ("* ", .bullet, false),
@@ -45,9 +48,9 @@ public enum BlockShortcut {
     }
 
     // Only the bracket shortcuts: on other layouts these keys give letter runs that
-    // are not words ("хъ " in Russian). "#" is left out on purpose: the same key
-    // types "№" in Russian and "§" in German, and "№№ 5–7" or "§§ 12–15" are
-    // ordinary ways to start a line.
+    // are not words ("хъ " in Russian). "#" is not matched by position: the same
+    // key types "§" in German, and "§§ 12–15" is an ordinary way to start a line.
+    // Russian "№№ " is in the text table above, by the author's decision.
     private static let physicalTable: [(keys: [PhysicalKey], kind: LineKind, done: Bool)] = [
         (
             [
