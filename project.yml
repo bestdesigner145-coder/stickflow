@@ -38,6 +38,10 @@ packages:
   GRDB:
     url: https://github.com/groue/GRDB.swift
     from: "7.0.0"
+  # Tests only.
+  SnapshotTesting:
+    url: https://github.com/pointfreeco/swift-snapshot-testing
+    from: "1.17.0"
   KeyboardShortcuts:
     url: https://github.com/sindresorhus/KeyboardShortcuts
     from: "2.0.0"
@@ -90,19 +94,45 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: $(STICKFLOW_BUNDLE_ID).StoreTests
         GENERATE_INFOPLIST_FILE: YES
 
+  # Pictures of the sticker, compared with references in the repository (spec 17.3).
+  # The tests run inside the app, started with --ui-testing.
+  StickflowSnapshotTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests/SnapshotTests
+        excludes:
+          - "__Snapshots__"
+          - "__Snapshots__/**"
+    dependencies:
+      - target: Stickflow
+      - package: StickflowCore
+      - package: SnapshotTesting
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(STICKFLOW_BUNDLE_ID).SnapshotTests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Stickflow.app/Contents/MacOS/Stickflow
+        BUNDLE_LOADER: $(TEST_HOST)
+
 schemes:
-  # Run the app; ⌘U also runs the storage tests.
+  # Run the app; ⌘U also runs the storage and snapshot tests.
   Stickflow:
     build:
       targets:
         Stickflow: all
         StickflowStoreTests: [test]
+        StickflowSnapshotTests: [test]
     run:
       config: Debug
     test:
       config: Debug
+      # The host app must not touch real stickers or settings while tests run.
+      commandLineArguments:
+        "--ui-testing": true
       targets:
         - StickflowStoreTests
+        - StickflowSnapshotTests
     archive:
       config: Release
 

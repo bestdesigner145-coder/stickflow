@@ -122,6 +122,48 @@ jobs:
             -derivedDataPath build/DerivedData \
             -quiet 2>&1 | tee test.log
 
+      # Spec 17.3, snapshot stage. The references were recorded on this runner image;
+      # other macOS versions draw text a little differently.
+      - name: Snapshot tests
+        id: snapshots
+        if: ${{ matrix.os == 'macos-26' }}
+        env:
+          TEST_RUNNER_SNAPSHOT_ARTIFACTS: ${{ github.workspace }}/snapshot-failures
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project Stickflow.xcodeproj \
+            -scheme Stickflow \
+            -only-testing:StickflowSnapshotTests \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath build/DerivedData \
+            -quiet 2>&1 | tee snapshot-test.log
+
+      - name: Upload snapshot differences
+        if: ${{ failure() && steps.snapshots.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapshot-failures
+          path: |
+            snapshot-failures
+            Tests/SnapshotTests/__Snapshots__
+          retention-days: 14
+
+      # Only for commits tagged [snapshots]: prints references recorded by this run,
+      # and pictures that did not match, so they can be read from the log.
+      - name: Print recorded snapshots
+        if: ${{ !cancelled() && matrix.os == 'macos-26' && contains(github.event.head_commit.message, '[snapshots]') }}
+        run: |
+          {
+            git ls-files --others --exclude-standard Tests/SnapshotTests/__Snapshots__
+            find snapshot-failures -name '*.png' 2>/dev/null || true
+          } | while read -r file; do
+            echo "-----BEGIN $file-----"
+            base64 -b 160 -i "$file"
+            echo "-----END $file-----"
+          done
+
       # Launches the app, types a sticker through the real editor and checks what was saved.
       - name: Self-check
         run: |
