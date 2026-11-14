@@ -119,8 +119,8 @@ struct TuningPanelView: View {
             }
             ToggleRow(title: "Keep stickers out of screenshots", isOn: $preferences.hideFromScreenCapture,
                       onChange: onPreferencesChange)
-            ToggleRow(title: "Hide while the screen is captured (experimental)",
-                      isOn: $preferences.hideWhileScreenIsCaptured, onChange: onPreferencesChange)
+            ToggleRow(title: "Hide while the screen is shared or recorded",
+                      isOn: $preferences.hideDuringScreenSharing, onChange: onPreferencesChange)
             LabeledContent {
                 Text(verbatim: captureStatus)
                     .foregroundStyle(.secondary)
@@ -138,10 +138,9 @@ struct TuningPanelView: View {
         } header: {
             Text(verbatim: "Screen sharing (5.2)")
         } footer: {
-            Text(verbatim: "macOS gives no reliable way to hide a window from screen sharing. "
-                + "“Out of screenshots” works for the system screenshot tool only; Zoom, Meet and Telegram "
-                + "still see stickers, and stickers may vanish during system animations while it is on. "
-                + "The experimental switch relies on a private system call.")
+            Text(verbatim: "Hiding relies on a private system call that reports a screen capture (spec 5.2, L1); "
+                + "check it in a real call. “Out of screenshots” (L3) covers the system screenshot tool only, "
+                + "and stickers may vanish during system animations while it is on.")
         }
     }
 

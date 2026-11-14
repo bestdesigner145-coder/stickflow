@@ -47,6 +47,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let newItem = makeItem(L10n.menuNewSticker, action: #selector(newSticker), key: "\r")
         newItem.keyEquivalentModifierMask = [.command, .option]
         menu.addItem(newItem)
+        if environment.stickers.areStickersHiddenByCapture {
+            menu.addItem(makeItem(L10n.menuHiddenWhileSharing, action: nil, enabled: false))
+            menu.addItem(.separator())
+        }
         // The quick way to get stickers out of sight, e.g. before sharing the screen.
         // Shows the hotkey once the user has assigned one.
         let toggleItem = makeItem(L10n.menuToggleAll, action: #selector(toggleStickers))

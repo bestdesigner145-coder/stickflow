@@ -75,6 +75,13 @@ final class Tuning {
     var toastOutDuration: Double = 0.150
     var toastShift: Double = 8
 
+    // MARK: Screen sharing (5.2)
+
+    /// How often the app asks whether the screen is being captured.
+    var captureWatchInterval: Double = 0.1
+    /// How long after the capture ends the stickers come back.
+    var captureReturnDelay: Double = 1.0
+
     // MARK: Shadows (6.2) — CSS-like: y offset, blur, opacity
 
     var restShadowOffset: Double = 1

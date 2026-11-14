@@ -3,15 +3,15 @@
 
 import Foundation
 
-/// Tells whether something is recording or sharing the screen right now.
+/// Tells whether something is recording or sharing the screen right now (spec 5.2, layer L1).
 ///
-/// EXPERIMENTAL. macOS has no public API for this question (iOS has
-/// `UIScreen.isCaptured`). The window server does know the answer and exposes it
-/// through the private function `CGSIsScreenWatcherPresent`. The symbol is looked
-/// up at run time: if a future macOS drops it, `isAvailable` turns false and the
-/// feature quietly switches itself off instead of crashing. It is a private
-/// interface, so it may also change meaning; nothing in the UI may promise that
-/// stickers are hidden from a capture.
+/// macOS has no public API for this question (iOS has `UIScreen.isCaptured`). The
+/// window server knows the answer and exposes it through a private function,
+/// `SLSIsScreenWatcherPresent` (older name: `CGSIsScreenWatcherPresent`). The
+/// symbol is looked up at run time: if a future macOS drops it, `isAvailable`
+/// turns false and this layer switches itself off instead of crashing. Being
+/// private, it may also change meaning, so the UI must not promise more than
+/// "hides when you share the screen", and only for apps checked by hand.
 @MainActor
 final class ScreenCaptureWatcher: NSObject {
     private typealias Probe = @convention(c) () -> Bool
@@ -26,11 +26,8 @@ final class ScreenCaptureWatcher: NSObject {
     override init() {
         // RTLD_DEFAULT: search every image already loaded into the process.
         let handle = UnsafeMutableRawPointer(bitPattern: -2)
-        if let symbol = dlsym(handle, "CGSIsScreenWatcherPresent") {
-            probe = unsafeBitCast(symbol, to: Probe.self)
-        } else {
-            probe = nil
-        }
+        let symbol = dlsym(handle, "SLSIsScreenWatcherPresent") ?? dlsym(handle, "CGSIsScreenWatcherPresent")
+        probe = symbol.map { unsafeBitCast($0, to: Probe.self) }
         super.init()
     }
 
@@ -42,11 +39,13 @@ final class ScreenCaptureWatcher: NSObject {
         probe.map { $0() }
     }
 
-    /// Starts polling. Cheap: one function call per second.
-    func start() {
+    /// Starts polling. Cheap: one function call per tick.
+    /// - Parameter interval: seconds between checks; the spec asks for 0.1, so that
+    ///   stickers are gone before the first shared frame.
+    func start(interval: TimeInterval) {
         guard timer == nil, isAvailable else { return }
-        let newTimer = Timer(timeInterval: 1.0, target: self, selector: #selector(poll), userInfo: nil, repeats: true)
-        newTimer.tolerance = 0.3
+        let newTimer = Timer(timeInterval: interval, target: self, selector: #selector(poll), userInfo: nil, repeats: true)
+        newTimer.tolerance = interval / 5
         RunLoop.main.add(newTimer, forMode: .common)
         timer = newTimer
         poll()

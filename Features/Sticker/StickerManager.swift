@@ -93,7 +93,7 @@ final class StickerManager: NSObject {
             self?.setUndoShortcutArmed(false)
         }
         captureWatcher.onChange = { [weak self] isCaptured in
-            self?.setHiddenByCapture(isCaptured)
+            self?.screenCaptureDidChange(isCaptured)
         }
         updateCaptureWatching()
 
@@ -364,6 +364,21 @@ final class StickerManager: NSObject {
         applyVisibility()
     }
 
+    /// Spec 5.2: stickers go at once when a capture starts, so that no frame
+    /// carries them, and come back a moment after it ends.
+    func screenCaptureDidChange(_ isCaptured: Bool) {
+        NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(captureEnded), object: nil)
+        if isCaptured {
+            setHiddenByCapture(true)
+        } else if areStickersHiddenByCapture {
+            perform(#selector(captureEnded), with: nil, afterDelay: tuning.captureReturnDelay)
+        }
+    }
+
+    @objc private func captureEnded() {
+        setHiddenByCapture(false)
+    }
+
     private func setHiddenByCapture(_ hidden: Bool) {
         guard hidden != areStickersHiddenByCapture else { return }
         areStickersHiddenByCapture = hidden
@@ -386,10 +401,10 @@ final class StickerManager: NSObject {
         pointer.kick()
     }
 
-    /// Experimental (see `ScreenCaptureWatcher`): hide stickers while the screen is captured.
+    /// Spec 5.2, layer L1 (see `ScreenCaptureWatcher`): hide stickers while the screen is captured.
     private func updateCaptureWatching() {
-        if preferences.hideWhileScreenIsCaptured {
-            captureWatcher.start()
+        if preferences.hideDuringScreenSharing {
+            captureWatcher.start(interval: tuning.captureWatchInterval)
         } else {
             captureWatcher.stop()
         }

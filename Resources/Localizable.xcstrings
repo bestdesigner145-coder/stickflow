@@ -188,6 +188,23 @@
         }
       }
     },
+    "menu.hidden_while_sharing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stickers are hidden: the screen is being shared"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Стикеры скрыты: идёт демонстрация"
+          }
+        }
+      }
+    },
     "menu.history": {
       "extractionState": "manual",
       "localizations": {

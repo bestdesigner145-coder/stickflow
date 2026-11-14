@@ -8,6 +8,7 @@ import StickflowCore
 enum L10n {
     static var menuNewSticker: String { String(localized: "menu.new_sticker") }
     static var menuToggleAll: String { String(localized: "menu.toggle_all") }
+    static var menuHiddenWhileSharing: String { String(localized: "menu.hidden_while_sharing") }
     static var menuPeelAll: String { String(localized: "menu.peel_all") }
     static var menuRestoreLast: String { String(localized: "menu.restore_last") }
     static var menuHistory: String { String(localized: "menu.history") }

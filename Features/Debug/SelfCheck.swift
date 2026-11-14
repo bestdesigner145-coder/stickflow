@@ -89,7 +89,7 @@ enum SelfCheck {
 
             // Snapshots must show the sticker; do not persist this change.
             environment.preferences.hideFromScreenCapture = false
-            environment.preferences.hideWhileScreenIsCaptured = false
+            environment.preferences.hideDuringScreenSharing = false
             stickers.applyPreferences()
             let watcher = stickers.captureWatcher
             note("screen-capture probe: available \(watcher.isAvailable), captured now \(String(describing: watcher.readNow()))")
@@ -394,6 +394,15 @@ enum SelfCheck {
                 stickers.toggleStickersHidden()
                 await pause(0.5)
                 check(stickers.controllers.allSatisfy { $0.panel.isVisible && abs(Double($0.panel.alphaValue) - 1) < 0.02 }, "“show all” brings them back")
+
+                // Screen sharing (spec 5.2): stickers go at once and come back a moment after it ends.
+                stickers.screenCaptureDidChange(true)
+                check(stickers.controllers.allSatisfy { !$0.panel.isVisible }, "a screen capture hides every sticker at once")
+                stickers.screenCaptureDidChange(false)
+                await pause(0.4)
+                check(stickers.controllers.allSatisfy { !$0.panel.isVisible }, "stickers stay hidden for a moment after the capture ends")
+                await pause(1.2)
+                check(stickers.controllers.allSatisfy { $0.panel.isVisible && abs(Double($0.panel.alphaValue) - 1) < 0.02 }, "then they come back")
             } catch {
                 check(false, "the repository can be queried (\(error))")
             }

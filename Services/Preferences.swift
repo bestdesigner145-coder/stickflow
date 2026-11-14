@@ -64,8 +64,8 @@ final class Preferences {
     /// It does not stop apps that share the screen through ScreenCaptureKit, so it
     /// is off by default and promises nothing.
     var hideFromScreenCapture: Bool
-    /// Experimental: take stickers off the screen while something records or shares it.
-    var hideWhileScreenIsCaptured: Bool
+    /// Take stickers off the screen while something records or shares it (spec 5.2).
+    var hideDuringScreenSharing: Bool
     var showOverFullscreen: Bool
     var defaultColor: PaperColor
     /// UUID of the display stickers live on; `nil` means the display with the menu bar.
@@ -84,7 +84,7 @@ final class Preferences {
         // "hideFromScreenSharing" was the first name of this setting, with the default
         // on. A new key makes the new default apply to everyone.
         static let hideFromScreenCapture = "hideFromScreenCapture"
-        static let hideWhileScreenIsCaptured = "hideWhileScreenIsCaptured"
+        static let hideDuringScreenSharing = "hideDuringScreenSharing"
         static let showOverFullscreen = "showOverFullscreen"
         static let defaultColor = "defaultColor"
         static let stickerDisplayUUID = "stickerDisplayUUID"
@@ -100,7 +100,7 @@ final class Preferences {
             Key.fadeEnabled: true,
             Key.editKey: EditKey.option.rawValue,
             Key.hideFromScreenCapture: false,
-            Key.hideWhileScreenIsCaptured: false,
+            Key.hideDuringScreenSharing: true,
             Key.showOverFullscreen: false,
             Key.defaultColor: PaperColor.default.rawValue,
             Key.editHintShownCount: 0,
@@ -112,7 +112,7 @@ final class Preferences {
         fadeEnabled = defaults.bool(forKey: Key.fadeEnabled)
         editKey = defaults.string(forKey: Key.editKey).flatMap(EditKey.init(rawValue:)) ?? .option
         hideFromScreenCapture = defaults.bool(forKey: Key.hideFromScreenCapture)
-        hideWhileScreenIsCaptured = defaults.bool(forKey: Key.hideWhileScreenIsCaptured)
+        hideDuringScreenSharing = defaults.bool(forKey: Key.hideDuringScreenSharing)
         showOverFullscreen = defaults.bool(forKey: Key.showOverFullscreen)
         defaultColor = defaults.string(forKey: Key.defaultColor).flatMap { PaperColor(stored: $0) } ?? .default
         stickerDisplayUUID = defaults.string(forKey: Key.stickerDisplayUUID)
@@ -130,7 +130,7 @@ final class Preferences {
         defaults.set(fadeEnabled, forKey: Key.fadeEnabled)
         defaults.set(editKey.rawValue, forKey: Key.editKey)
         defaults.set(hideFromScreenCapture, forKey: Key.hideFromScreenCapture)
-        defaults.set(hideWhileScreenIsCaptured, forKey: Key.hideWhileScreenIsCaptured)
+        defaults.set(hideDuringScreenSharing, forKey: Key.hideDuringScreenSharing)
         defaults.set(showOverFullscreen, forKey: Key.showOverFullscreen)
         defaults.set(defaultColor.rawValue, forKey: Key.defaultColor)
         if let stickerDisplayUUID {
