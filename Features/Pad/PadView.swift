@@ -19,6 +19,12 @@ final class PadView: NSView {
         didSet { needsDisplay = true }
     }
 
+    /// How much of the pad stays behind the screen edge when it is out. The label
+    /// is centred on what can be seen.
+    var hiddenWidth: CGFloat = 0 {
+        didSet { needsDisplay = true }
+    }
+
     private(set) var isHovered = false {
         didSet { needsDisplay = true }
     }
@@ -143,7 +149,10 @@ final class PadView: NSView {
         foldPath.lineWidth = 0.5
         foldPath.stroke()
 
-        drawLabel(in: top.insetBy(dx: 10, dy: 12))
+        var labelArea = top.insetBy(dx: 10, dy: 12)
+        labelArea.size.width -= hiddenWidth
+        if edge == .left { labelArea.origin.x += hiddenWidth }
+        drawLabel(in: labelArea)
     }
 
     private func drawLabel(in rect: NSRect) {
