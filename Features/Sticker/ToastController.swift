@@ -31,7 +31,7 @@ final class ToastController: NSObject {
     func show(
         message: String,
         actionTitle: String,
-        on screen: NSScreen,
+        on screen: ScreenInfo,
         tuning: Tuning,
         action: @escaping () -> Void
     ) {

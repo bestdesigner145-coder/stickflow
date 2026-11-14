@@ -13,12 +13,7 @@ import StickflowCore
 /// - `editing`: the text has keyboard focus; stays interactive without the key.
 @MainActor
 final class StickerController: NSObject {
-    enum Mode: Equatable {
-        case rest
-        case faded
-        case editMode
-        case editing
-    }
+    typealias Mode = StickerStateMachine.Mode
 
     private(set) var sticker: Sticker
     let panel: StickerPanel
@@ -27,22 +22,16 @@ final class StickerController: NSObject {
 
     private let tuning: Tuning
     private let preferences: Preferences
+    private let clock: any AppClock
 
-    private(set) var mode: Mode = .rest
+    /// Decides the mode from what the pointer and the edit key do.
+    private var machine = StickerStateMachine()
+    var mode: Mode { machine.mode }
     private(set) var isClosed = false
     /// Peeled off and flying away; the window closes when the animation ends.
     private(set) var isLeaving = false
     private var isDragging = false
     private var isMenuOpen = false
-
-    /// When the cursor entered the paper; drives the fade delay and the hint.
-    private var hoverSince: TimeInterval?
-    /// When edit mode ends after the key was released or the cursor left.
-    private var releaseDeadline: TimeInterval?
-    private var wasNear = false
-    /// False when the edit key was already down as the cursor arrived (debug rule, see `Tuning`).
-    private var isArmed = true
-    private var hintShownForThisHover = false
 
     private var dragStartMouse = CGPoint.zero
     private var dragStartOrigin = CGPoint.zero
@@ -50,10 +39,11 @@ final class StickerController: NSObject {
 
     // MARK: Lifecycle
 
-    init(sticker: Sticker, tuning: Tuning, preferences: Preferences) {
+    init(sticker: Sticker, tuning: Tuning, preferences: Preferences, clock: any AppClock) {
         self.sticker = sticker
         self.tuning = tuning
         self.preferences = preferences
+        self.clock = clock
         panel = StickerPanel.make()
         rootView = StickerRootView(frame: NSRect(x: 0, y: 0, width: 320, height: 200))
         super.init()
@@ -245,12 +235,12 @@ final class StickerController: NSObject {
         }
     }
 
-    private func setMode(_ newMode: Mode, animated: Bool = true) {
-        guard newMode != mode else { return }
-        let previous = mode
-        mode = newMode
-        setIgnoresMouse(!(newMode == .editMode || newMode == .editing))
-        applyMode(from: previous, animated: animated)
+    /// Shows the state machine's mode after it changed.
+    private func modeDidChange(from previous: Mode) {
+        let current = machine.mode
+        guard current != previous else { return }
+        setIgnoresMouse(!(current == .editMode || current == .editing))
+        applyMode(from: previous, animated: true)
     }
 
     private func setIgnoresMouse(_ ignores: Bool) {
@@ -321,77 +311,49 @@ final class StickerController: NSObject {
     /// True while this sticker needs 60 Hz pointer samples.
     func wantsPointerUpdates(at location: CGPoint) -> Bool {
         guard isOnScreen else { return false }
-        if isDragging || mode == .faded || mode == .editMode || hoverSince != nil || releaseDeadline != nil {
+        if isDragging || machine.needsContinuousInput {
             return true
         }
         let reach = CGFloat(tuning.pointerPollProximity)
         return paperFrame.insetBy(dx: -reach, dy: -reach).contains(location)
     }
 
+    /// Turns what the pointer does into input for the state machine (in
+    /// `StickflowCore`, where it is unit-tested) and shows the mode it answers with.
     func pointerDidUpdate(_ sample: PointerSample) {
         guard isOnScreen, !isDragging, !isMenuOpen else { return }
 
         let paper = paperFrame
         let proximity = CGFloat(tuning.editKeyProximity)
-        let isOver = paper.contains(sample.location)
-        let isNear = paper.insetBy(dx: -proximity, dy: -proximity).contains(sample.location)
-        let isKeyDown = sample.modifiers.contains(preferences.editKey.flag)
+        let input = StickerStateMachine.Input(
+            isOver: paper.contains(sample.location),
+            isNear: paper.insetBy(dx: -proximity, dy: -proximity).contains(sample.location),
+            isEditKeyDown: sample.modifiers.contains(preferences.editKey.flag),
+            isMouseDown: sample.isMouseDown,
+            time: sample.time
+        )
+        let rules = StickerStateMachine.Rules(
+            fadeEnabled: preferences.fadeEnabled,
+            fadeDelay: tuning.fadeDelay,
+            releaseGrace: tuning.editKeyReleaseGrace,
+            hintDwell: tuning.hintDwell,
+            suppressEditWhileMouseDown: tuning.suppressEditWhileMouseDown,
+            keyMustBePressedAtSticker: tuning.editRequiresKeyPressOverSticker
+        )
 
-        // Debug rule: the key only counts when pressed with the cursor already here.
-        if !isKeyDown {
-            isArmed = true
-        } else if isNear, !wasNear, tuning.editRequiresKeyPressOverSticker {
-            isArmed = false
-        }
-        wasNear = isNear
-
-        switch mode {
-        case .editing:
+        let previous = machine.mode
+        let outcome = machine.pointerMoved(input, rules: rules)
+        if machine.mode == .editing {
             // Clickable only over the paper, so the transparent shadow margin
             // never swallows a click meant for the app underneath.
-            setIgnoresMouse(!isNear)
-
-        case .editMode:
-            if isKeyDown, isNear {
-                releaseDeadline = nil
-                return
-            }
-            let deadline = releaseDeadline ?? sample.time + tuning.editKeyReleaseGrace
-            releaseDeadline = deadline
-            if sample.time >= deadline {
-                releaseDeadline = nil
-                hoverSince = isOver ? sample.time : nil
-                hintShownForThisHover = true
-                setMode(.rest)
-            }
-
-        case .rest, .faded:
-            let isBlockedByMouse = tuning.suppressEditWhileMouseDown && sample.isMouseDown
-            if isKeyDown, isNear, isArmed, !isBlockedByMouse {
-                hoverSince = nil
-                manager?.hideHint()
-                setMode(.editMode)
-                return
-            }
-            guard isOver else {
-                hoverSince = nil
-                hintShownForThisHover = false
-                if mode == .faded { setMode(.rest) }
-                return
-            }
-            let since = hoverSince ?? sample.time
-            hoverSince = since
-            let dwell = sample.time - since
-
-            if preferences.fadeEnabled {
-                if mode == .rest, dwell >= tuning.fadeDelay { setMode(.faded) }
-            } else if mode == .faded {
-                setMode(.rest)
-            }
-            if !isKeyDown, !hintShownForThisHover, dwell >= tuning.hintDwell {
-                hintShownForThisHover = true
-                manager?.showEditHintIfNeeded(near: sample.location)
-            }
+            setIgnoresMouse(!input.isNear)
+        }
+        modeDidChange(from: previous)
+        if outcome.hidesHint {
+            manager?.hideHint()
+        }
+        if outcome.showsHint {
+            manager?.showEditHintIfNeeded(near: sample.location)
         }
     }
 
@@ -408,9 +370,9 @@ final class StickerController: NSObject {
         rootView.isEditing = true
         textView.isEditable = true
         textView.isSelectable = true
-        releaseDeadline = nil
-        hoverSince = nil
-        setMode(.editing)
+        let previous = machine.mode
+        machine.beginEditing()
+        modeDidChange(from: previous)
 
         panel.orderFrontRegardless()
         panel.makeKey()
@@ -454,9 +416,9 @@ final class StickerController: NSObject {
             }
         }
 
-        hoverSince = nil
-        releaseDeadline = nil
-        setMode(.rest)
+        let previous = machine.mode
+        machine.endEditing()
+        modeDidChange(from: previous)
 
         if sticker.isBlank {
             manager?.discard(self)
@@ -474,7 +436,7 @@ final class StickerController: NSObject {
         guard result.title != sticker.title || result.blocks != sticker.blocks else { return }
         sticker.title = result.title
         sticker.blocks = result.blocks
-        sticker.updatedAt = Date()
+        sticker.updatedAt = clock.now
     }
 
     private func installClickMonitors() {
@@ -563,14 +525,14 @@ final class StickerController: NSObject {
         isMenuOpen = true
         menu.popUp(positioning: nil, at: rootView.menuAnchor, in: rootView)
         isMenuOpen = false
-        releaseDeadline = nil
+        machine.cancelPendingRelease()
         manager?.pointerNeedsAttention()
     }
 
     @objc private func pickColor(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let color = PaperColor(stored: raw) else { return }
         sticker.color = color
-        sticker.updatedAt = Date()
+        sticker.updatedAt = clock.now
         applySettings()
         manager?.persist(self)
     }
@@ -629,7 +591,7 @@ extension StickerController: StickerRootViewDelegate {
     func rootView(_ view: StickerRootView, mouseUpWith event: NSEvent) {
         guard isDragging else { return }
         isDragging = false
-        releaseDeadline = nil
+        machine.cancelPendingRelease()
         NSCursor.openHand.set()
 
         let origin = panel.frame.origin

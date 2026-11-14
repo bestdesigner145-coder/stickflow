@@ -26,8 +26,18 @@ final class PointerTracker: NSObject {
     var needsPolling: ((CGPoint) -> Bool)?
     var pollInterval: () -> TimeInterval = { 1.0 / 60.0 }
 
+    private let mouse: any MouseSource
+    private let modifiers: any ModifierSource
+    private let clock: any AppClock
     private var monitors: [Any] = []
     private var timer: Timer?
+
+    init(mouse: any MouseSource, modifiers: any ModifierSource, clock: any AppClock) {
+        self.mouse = mouse
+        self.modifiers = modifiers
+        self.clock = clock
+        super.init()
+    }
 
     func start() {
         guard monitors.isEmpty else { return }
@@ -67,7 +77,7 @@ final class PointerTracker: NSObject {
     }
 
     private func pointerMoved() {
-        guard timer == nil, needsPolling?(NSEvent.mouseLocation) == true else { return }
+        guard timer == nil, needsPolling?(mouse.location) == true else { return }
         startTimer()
     }
 
@@ -92,12 +102,12 @@ final class PointerTracker: NSObject {
     }
 
     @objc private func tick() {
-        let location = NSEvent.mouseLocation
+        let location = mouse.location
         let sample = PointerSample(
             location: location,
-            modifiers: NSEvent.modifierFlags,
-            isMouseDown: NSEvent.pressedMouseButtons != 0,
-            time: ProcessInfo.processInfo.systemUptime
+            modifiers: modifiers.modifiers,
+            isMouseDown: mouse.isButtonDown,
+            time: clock.uptime
         )
         onSample?(sample)
         if needsPolling?(location) != true {

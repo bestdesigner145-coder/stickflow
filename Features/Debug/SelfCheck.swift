@@ -95,7 +95,7 @@ enum SelfCheck {
             note("screen-capture probe: available \(watcher.isAvailable), captured now \(String(describing: watcher.readNow()))")
 
             if let screen = environment.displays.menuBarScreen {
-                note("screen frame \(screen.frame), visible \(screen.visibleFrame), scale \(screen.backingScaleFactor)")
+                note("screen frame \(screen.frame), visible \(screen.visibleFrame), scale \(NSScreen.screens.first?.backingScaleFactor ?? 0)")
             } else {
                 check(false, "a screen is available")
                 return
@@ -479,7 +479,7 @@ enum SelfCheck {
         }
 
         /// Uses the system `screencapture` tool. Returns false when it is not allowed to run.
-        func captureScreen(_ rect: CGRect, on screen: NSScreen, name: String) -> Bool {
+        func captureScreen(_ rect: CGRect, on screen: ScreenInfo, name: String) -> Bool {
             let url = output.appendingPathComponent("\(name).png")
             // `screencapture -R` takes top-left based coordinates.
             let top = screen.frame.maxY - rect.maxY

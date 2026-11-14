@@ -8,12 +8,14 @@ import StickflowCore
 /// wired together (spec 10.1). Everything else receives what it needs.
 @MainActor
 final class AppEnvironment {
-    let tuning = Tuning()
-    let preferences = Preferences()
-    let displays = DisplayService()
+    let options: LaunchOptions
+    let tuning: Tuning
+    let preferences: Preferences
+    let displays: any ScreenGeometry
+    let clock: any AppClock
     let loginItem = LoginItemService()
     let hotkeys = HotkeyService()
-    let repository: StickerRepository
+    let repository: any StickerStore
     let stickers: StickerManager
 
     private var statusItem: StatusItemController?
@@ -22,21 +24,71 @@ final class AppEnvironment {
     private var tuningPanel: TuningPanelController?
     #endif
 
-    init() throws {
-        #if DEBUG
-        // The CI self-check works on its own database and never touches real stickers.
-        let databaseURL = try SelfCheck.prepareDatabaseURL() ?? AppDatabase.defaultURL()
-        #else
-        let databaseURL = try AppDatabase.defaultURL()
-        #endif
-        let database = try AppDatabase.onDisk(at: databaseURL)
-        repository = StickerRepository(database: database)
+    init(options: LaunchOptions = LaunchOptions(arguments: CommandLine.arguments)) throws {
+        self.options = options
+
+        let database: AppDatabase
+        let preferences: Preferences
+        let displays: any ScreenGeometry
+        let clock: any AppClock
+        if options.isUITesting {
+            // Spec 17.4: every run starts the same and leaves nothing behind.
+            // The database and the settings live in memory, the date and the
+            // screen layout are fixed, animations are off.
+            database = try AppDatabase.inMemory()
+            preferences = Preferences(defaults: Self.throwawayDefaults())
+            displays = FixedScreenGeometry.single()
+            clock = FixedClock.uiTesting
+        } else {
+            #if DEBUG
+            // The CI self-check works on its own database and never touches real stickers.
+            let databaseURL = try SelfCheck.prepareDatabaseURL() ?? AppDatabase.defaultURL()
+            #else
+            let databaseURL = try AppDatabase.defaultURL()
+            #endif
+            database = try AppDatabase.onDisk(at: databaseURL)
+            preferences = Preferences()
+            displays = DisplayService()
+            clock = SystemClock()
+        }
+
+        let repository = StickerRepository(database: database)
+        if let seed = options.seed {
+            for sticker in seed.stickers(now: clock.now) {
+                try repository.save(sticker)
+            }
+        }
+        if let unknownSeed = options.unknownSeed {
+            let known = SeedFixture.allCases.map(\.rawValue).joined(separator: ", ")
+            FileHandle.standardError.write(Data("Stickflow: unknown --seed=\(unknownSeed). Known: \(known)\n".utf8))
+        }
+
+        let tuning = Tuning()
+        if options.isUITesting {
+            tuning.animationSlowdown = 0
+        }
+        let pointerSource = SystemPointerSource()
+        self.tuning = tuning
+        self.preferences = preferences
+        self.displays = displays
+        self.clock = clock
+        self.repository = repository
         stickers = StickerManager(
             tuning: tuning,
             preferences: preferences,
             repository: repository,
-            displays: displays
+            displays: displays,
+            clock: clock,
+            pointer: PointerTracker(mouse: pointerSource, modifiers: pointerSource, clock: clock)
         )
+    }
+
+    /// Settings that start empty and are never written to disk.
+    private static func throwawayDefaults() -> UserDefaults {
+        let name = "io.github.stickflow.ui-testing"
+        guard let defaults = UserDefaults(suiteName: name) else { return .standard }
+        defaults.removePersistentDomain(forName: name)
+        return defaults
     }
 
     func start() {

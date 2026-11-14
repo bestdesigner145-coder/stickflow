@@ -29,8 +29,10 @@ Tests/           store tests, snapshot tests
 ```
 
 `AppEnvironment` is the only container; everything else gets its dependencies passed in.
-The outside world sits behind protocols (`Clock`, `ScreenGeometry`, `PointerSource`,
-`StickerStore`) so that tests can replace it.
+The outside world sits behind protocols (`AppClock`, `ScreenGeometry`, `MouseSource`,
+`ModifierSource`, `StickerStore`) so that tests can replace it. `--ui-testing` starts the
+app with a memory-only database and settings, a fixed date, a fixed screen layout and
+no animations; `--seed=<plan|long|pair>` gives it stickers to start with.
 
 ## Before you push
 

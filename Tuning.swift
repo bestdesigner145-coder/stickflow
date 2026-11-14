@@ -115,7 +115,8 @@ final class Tuning {
     var animationSlowdown: Double = 1
 
     func scaled(_ duration: Double) -> Double {
-        duration * max(animationSlowdown, 0.01)
+        // Zero switches animations off (`--ui-testing`, spec 17.4).
+        duration * max(animationSlowdown, 0)
     }
 }
 

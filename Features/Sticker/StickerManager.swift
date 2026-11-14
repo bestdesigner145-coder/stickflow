@@ -15,9 +15,10 @@ final class StickerManager: NSObject {
 
     private let tuning: Tuning
     private let preferences: Preferences
-    private let repository: StickerRepository
-    private let displays: DisplayService
-    private let pointer = PointerTracker()
+    private let repository: any StickerStore
+    private let displays: any ScreenGeometry
+    private let clock: any AppClock
+    private let pointer: PointerTracker
     private let hint = EditHintController()
     private let toast = ToastController()
     private lazy var focusReturn = FocusReturnPanel.make()
@@ -48,11 +49,20 @@ final class StickerManager: NSObject {
     /// Stickers that exist in the database, so a discarded one is removed there too.
     private var stored: Set<UUID> = []
 
-    init(tuning: Tuning, preferences: Preferences, repository: StickerRepository, displays: DisplayService) {
+    init(
+        tuning: Tuning,
+        preferences: Preferences,
+        repository: any StickerStore,
+        displays: any ScreenGeometry,
+        clock: any AppClock,
+        pointer: PointerTracker
+    ) {
         self.tuning = tuning
         self.preferences = preferences
         self.repository = repository
         self.displays = displays
+        self.clock = clock
+        self.pointer = pointer
         super.init()
     }
 
@@ -122,7 +132,7 @@ final class StickerManager: NSObject {
         }
         // Asking for a new sticker is asking to see stickers.
         showAll()
-        let now = Date()
+        let now = clock.now
         let sticker = Sticker(color: preferences.defaultColor, source: .typed, createdAt: now, stuckAt: now)
         let controller = addController(for: sticker)
         place(controller)
@@ -132,7 +142,7 @@ final class StickerManager: NSObject {
 
     @discardableResult
     private func addController(for sticker: Sticker) -> StickerController {
-        let controller = StickerController(sticker: sticker, tuning: tuning, preferences: preferences)
+        let controller = StickerController(sticker: sticker, tuning: tuning, preferences: preferences, clock: clock)
         controller.manager = self
         controllers.append(controller)
         return controller
@@ -167,7 +177,7 @@ final class StickerManager: NSObject {
         guard !controller.isClosed else { return nil } // it was empty and got discarded
         let frame = controller.paperFrame
         let wasOnScreen = controller.isOnScreen
-        let now = Date()
+        let now = clock.now
         controller.updateSticker { sticker in
             sticker.status = sticker.statusAfterPeeling
             sticker.peeledAt = now
@@ -243,7 +253,7 @@ final class StickerManager: NSObject {
               !controllers.contains(where: { $0.sticker.id == stored.id })
         else { return }
         var sticker = stored
-        let now = Date()
+        let now = clock.now
         sticker.status = .active
         sticker.peeledAt = nil
         sticker.stuckAt = now
@@ -316,7 +326,7 @@ final class StickerManager: NSObject {
     /// Drops a sticker that ended up without any text.
     func discard(_ controller: StickerController) {
         if stored.contains(controller.sticker.id) {
-            let now = Date()
+            let now = clock.now
             controller.updateSticker { sticker in
                 sticker.status = .trashed
                 sticker.deletedAt = now
@@ -418,7 +428,7 @@ final class StickerManager: NSObject {
 
     // MARK: Placement
 
-    private func targetScreen(for sticker: Sticker) -> NSScreen? {
+    private func targetScreen(for sticker: Sticker) -> ScreenInfo? {
         if let key = sticker.placement?.displayKey,
            let uuid = DisplayKey.uuid(from: key),
            let screen = displays.screen(forUUID: uuid) {
@@ -436,7 +446,7 @@ final class StickerManager: NSObject {
 
         let size = controller.paperFrame.size
         let topLeft: CGPoint
-        if let stored = controller.sticker.placement?.positions[displays.key(for: screen)] {
+        if let stored = controller.sticker.placement?.positions[screen.key] {
             topLeft = CGPoint(x: screen.frame.minX + stored.x, y: screen.frame.maxY - stored.y)
         } else {
             topLeft = defaultTopLeft(for: controller, width: size.width, on: screen)
@@ -448,7 +458,7 @@ final class StickerManager: NSObject {
 
     /// Default anchor (spec 4.5): upper right of the work area, below window toolbars.
     /// Until stacks arrive in stage 2, stickers that would land on the same spot are cascaded.
-    private func defaultTopLeft(for controller: StickerController, width: CGFloat, on screen: NSScreen) -> CGPoint {
+    private func defaultTopLeft(for controller: StickerController, width: CGFloat, on screen: ScreenInfo) -> CGPoint {
         let topRight = StickerGeometry.defaultTopRight(
             visibleFrame: screen.visibleFrame,
             insetRight: CGFloat(tuning.anchorInsetRight),
@@ -473,7 +483,7 @@ final class StickerManager: NSObject {
     /// Double click on the glue strip: forget the custom position on the sticker display.
     func moveToDefaultAnchor(_ controller: StickerController) {
         guard let screen = displays.stickerScreen(preferredUUID: preferences.stickerDisplayUUID) else { return }
-        let key = displays.key(for: screen)
+        let key = screen.key
         controller.updateSticker { sticker in
             sticker.placement?.displayKey = nil
             sticker.placement?.positions[key] = nil
@@ -498,7 +508,7 @@ final class StickerManager: NSObject {
         )
         controller.setPaperFrame(snapped)
 
-        let key = displays.key(for: screen)
+        let key = screen.key
         let position = StickerPoint(
             x: Double(snapped.minX - screen.frame.minX),
             y: Double(screen.frame.maxY - snapped.maxY)

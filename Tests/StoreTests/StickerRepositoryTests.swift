@@ -105,6 +105,30 @@ final class StickerRepositoryTests: XCTestCase {
         XCTAssertEqual(try repository.lastPeeled()?.id, newer.id)
     }
 
+    func testInMemoryStoreAnswersLikeTheDatabase() throws {
+        let stores: [any StickerStore] = try [makeRepository(), InMemoryStickerStore()]
+        for store in stores {
+            var first = makeSticker(status: .active)
+            first.title = "first"
+            var peeled = makeSticker(status: .draft)
+            peeled.peeledAt = moment
+            var gone = makeSticker(status: .active)
+            gone.deletedAt = moment
+            for sticker in [first, peeled, gone] {
+                try store.save(sticker)
+            }
+
+            XCTAssertEqual(try store.sticker(id: first.id)?.title, "first")
+            XCTAssertEqual(try store.stickers(status: .active).map(\.id), [first.id], "soft-deleted stickers are left out")
+            XCTAssertEqual(try store.lastPeeled()?.id, peeled.id)
+
+            first.title = "renamed"
+            try store.save(first)
+            XCTAssertEqual(try store.sticker(id: first.id)?.title, "renamed")
+            XCTAssertNil(try store.sticker(id: UUID()))
+        }
+    }
+
     func testUnknownEnumValuesFallBackInsteadOfFailing() throws {
         let repository = try makeRepository()
         let sticker = makeSticker()

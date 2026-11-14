@@ -99,9 +99,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         submenu.addItem(automatic)
         submenu.addItem(.separator())
 
-        for screen in NSScreen.screens {
-            guard let uuid = environment.displays.uuid(for: screen) else { continue }
-            let item = makeItem(screen.localizedName, action: #selector(pickDisplay(_:)))
+        for screen in environment.displays.screens {
+            guard let uuid = screen.uuid else { continue }
+            let item = makeItem(screen.name, action: #selector(pickDisplay(_:)))
             item.representedObject = uuid
             item.state = selected == uuid ? .on : .off
             submenu.addItem(item)
