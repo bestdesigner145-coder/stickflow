@@ -102,7 +102,7 @@ final class Preferences {
             Key.hideFromScreenCapture: false,
             Key.hideWhileScreenIsCaptured: false,
             Key.showOverFullscreen: false,
-            Key.defaultColor: PaperColor.paper.rawValue,
+            Key.defaultColor: PaperColor.default.rawValue,
             Key.editHintShownCount: 0,
         ])
 
@@ -114,7 +114,7 @@ final class Preferences {
         hideFromScreenCapture = defaults.bool(forKey: Key.hideFromScreenCapture)
         hideWhileScreenIsCaptured = defaults.bool(forKey: Key.hideWhileScreenIsCaptured)
         showOverFullscreen = defaults.bool(forKey: Key.showOverFullscreen)
-        defaultColor = defaults.string(forKey: Key.defaultColor).flatMap(PaperColor.init(rawValue:)) ?? .paper
+        defaultColor = defaults.string(forKey: Key.defaultColor).flatMap { PaperColor(stored: $0) } ?? .default
         stickerDisplayUUID = defaults.string(forKey: Key.stickerDisplayUUID)
         editHintShownCount = defaults.integer(forKey: Key.editHintShownCount)
     }

@@ -22,7 +22,7 @@ final class StickerRepositoryTests: XCTestCase {
                 Block(kind: .todo, text: "Созвон с разработкой 15:00", done: true, doneAt: moment),
             ],
             status: status,
-            color: .cream,
+            color: .yellow,
             placement: Placement(
                 displayKey: "DISPLAY@1728x1117",
                 positions: ["DISPLAY@1728x1117": StickerPoint(x: 1476, y: 145)]

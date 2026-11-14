@@ -50,7 +50,7 @@ final class ModelTests: XCTestCase {
             title: "План на день",
             blocks: [Block(kind: .todo, text: "Созвон", done: true, doneAt: Date(timeIntervalSince1970: 1_800_000_000))],
             status: .active,
-            color: .sage,
+            color: .green,
             placement: Placement(displayKey: "ABC@1728x1117", positions: ["ABC@1728x1117": StickerPoint(x: 1400, y: 150)]),
             source: .dictated,
             rawInput: "ну короче созвон",
@@ -72,8 +72,18 @@ final class ModelTests: XCTestCase {
     func testPaletteMatchesSpec() {
         XCTAssertEqual(PaperColor.paper.palette.paper(dark: false), 0xF2EFE8)
         XCTAssertEqual(PaperColor.paper.palette.paper(dark: true), 0x34332F)
-        XCTAssertEqual(PaperColor.cream.palette.text(dark: false), 0x2B2718)
-        XCTAssertEqual(PaperColor.sage.palette.text(dark: true), 0xE0E8D3)
+        XCTAssertEqual(PaperColor.yellow.palette.paper(dark: false), 0xF8E38C)
+        XCTAssertEqual(PaperColor.blue.palette.text(dark: true), 0xDCEBFA)
+        XCTAssertEqual(PaperColor.default, .yellow)
+    }
+
+    func testLegacyColorNames() throws {
+        XCTAssertEqual(PaperColor(stored: "cream"), .yellow)
+        XCTAssertEqual(PaperColor(stored: "sage"), .green)
+        XCTAssertEqual(PaperColor(stored: "paper"), .paper)
+        XCTAssertNil(PaperColor(stored: "neon"))
+        let decoded = try JSONDecoder().decode([PaperColor].self, from: Data(#"["cream","sage","blue","neon"]"#.utf8))
+        XCTAssertEqual(decoded, [.yellow, .green, .blue, .yellow])
     }
 
     func testShortcuts() {

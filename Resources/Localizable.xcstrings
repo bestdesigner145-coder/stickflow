@@ -1,19 +1,36 @@
 {
   "sourceLanguage": "en",
   "strings": {
-    "color.cream": {
+    "color.blue": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Cream"
+            "value": "Blue"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Сливочный"
+            "value": "Голубой"
+          }
+        }
+      }
+    },
+    "color.green": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Green"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Зелёный"
           }
         }
       }
@@ -35,19 +52,36 @@
         }
       }
     },
-    "color.sage": {
+    "color.pink": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sage"
+            "value": "Pink"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Шалфей"
+            "value": "Розовый"
+          }
+        }
+      }
+    },
+    "color.yellow": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yellow"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Жёлтый"
           }
         }
       }

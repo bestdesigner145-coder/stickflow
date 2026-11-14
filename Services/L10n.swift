@@ -47,9 +47,11 @@ enum L10n {
 
     static func name(of color: PaperColor) -> String {
         switch color {
+        case .yellow: String(localized: "color.yellow")
+        case .blue: String(localized: "color.blue")
+        case .green: String(localized: "color.green")
+        case .pink: String(localized: "color.pink")
         case .paper: String(localized: "color.paper")
-        case .cream: String(localized: "color.cream")
-        case .sage: String(localized: "color.sage")
         }
     }
 }

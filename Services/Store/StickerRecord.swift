@@ -68,7 +68,7 @@ extension StickerRecord {
             title: title,
             blocks: decodedBlocks,
             status: Sticker.Status(rawValue: status) ?? .draft,
-            color: PaperColor(rawValue: color) ?? .paper,
+            color: PaperColor(stored: color) ?? .default,
             placement: decodedPlacement,
             source: Sticker.Source(rawValue: source) ?? .typed,
             rawInput: rawInput,

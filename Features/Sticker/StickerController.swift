@@ -568,7 +568,7 @@ final class StickerController: NSObject {
     }
 
     @objc private func pickColor(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String, let color = PaperColor(rawValue: raw) else { return }
+        guard let raw = sender.representedObject as? String, let color = PaperColor(stored: raw) else { return }
         sticker.color = color
         sticker.updatedAt = Date()
         applySettings()
