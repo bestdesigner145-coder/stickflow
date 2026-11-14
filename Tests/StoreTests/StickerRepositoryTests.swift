@@ -119,9 +119,23 @@ final class StickerRepositoryTests: XCTestCase {
         }
 
         let loaded = try XCTUnwrap(try repository.sticker(id: sticker.id))
-        XCTAssertEqual(loaded.color, .paper)
+        XCTAssertEqual(loaded.color, .default)
         XCTAssertEqual(loaded.source, .typed)
         XCTAssertEqual(loaded.blocks, sticker.blocks)
+    }
+
+    func testLegacyColorNamesAreRead() throws {
+        let repository = try makeRepository()
+        let sticker = makeSticker()
+        try repository.save(sticker)
+
+        // Rows written by builds before the classic palette.
+        try repository.database.queue.write { db in
+            try db.execute(sql: "UPDATE sticker SET color = 'sage' WHERE id = ?", arguments: [sticker.id.uuidString])
+        }
+
+        let loaded = try XCTUnwrap(try repository.sticker(id: sticker.id))
+        XCTAssertEqual(loaded.color, .green)
     }
 
     func testMigrationsCanRunTwice() throws {
