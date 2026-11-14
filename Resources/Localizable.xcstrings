@@ -86,6 +86,74 @@
         }
       }
     },
+    "draft.dictate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dictate"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Надиктовать"
+          }
+        }
+      }
+    },
+    "draft.placeholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type or talk — I'll sort it into tasks"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Напиши или надиктуй — разложу по пунктам"
+          }
+        }
+      }
+    },
+    "draft.stick": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stick"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Приклеить"
+          }
+        }
+      }
+    },
+    "draft.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What's on today?"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Что на сегодня?"
+          }
+        }
+      }
+    },
     "error.database.title": {
       "extractionState": "manual",
       "localizations": {
@@ -354,6 +422,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Показать / скрыть все стикеры"
+          }
+        }
+      }
+    },
+    "pad.label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jot down tasks"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Записать задачи"
           }
         }
       }

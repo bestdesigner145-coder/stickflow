@@ -9,6 +9,12 @@ import StickflowCore
 final class StickerManager: NSObject {
     /// Called with a localized title when storage fails.
     var onError: ((String, Error) -> Void)?
+    /// Every pointer sample, for the call zone at the screen edge.
+    var onPointerSample: ((PointerSample) -> Void)?
+    /// Lets the call zone keep the pointer polled when no sticker needs it.
+    var alsoNeedsPolling: ((CGPoint) -> Bool)?
+    /// Called when a screen capture hides the stickers or lets them back.
+    var onCaptureHidingChange: ((Bool) -> Void)?
     /// Asks for the temporary ⌘Z ("bring the peeled sticker back") to be registered
     /// or released. See `HotkeyService.setUndoPeelArmed`.
     var onUndoShortcutArmedChange: ((Bool) -> Void)?
@@ -138,6 +144,45 @@ final class StickerManager: NSObject {
         place(controller)
         controller.show(animated: true)
         controller.beginEditing(at: nil)
+    }
+
+    /// Sticks what was written in the draft (spec 4.3, 4.4). The flight and the
+    /// impact come later in stage 2; for now the sticker appears in its place.
+    @discardableResult
+    func stick(_ plan: PlainTextPlan.Result, rawInput: String) -> StickerController? {
+        guard !plan.isEmpty else { return nil }
+        showAll()
+        let now = clock.now
+        let sticker = Sticker(
+            title: plan.title,
+            blocks: plan.blocks,
+            color: preferences.defaultColor,
+            source: .typed,
+            rawInput: rawInput,
+            createdAt: now,
+            stuckAt: now
+        )
+        save(sticker)
+        let controller = addController(for: sticker)
+        place(controller)
+        controller.show(animated: true)
+        pointer.kick()
+        return controller
+    }
+
+    /// Keeps a draft that was closed without sticking (spec 4.3: Esc saves it to history).
+    func keepDraft(_ plan: PlainTextPlan.Result, rawInput: String) {
+        guard !plan.isEmpty else { return }
+        let now = clock.now
+        save(Sticker(
+            title: plan.title,
+            blocks: plan.blocks,
+            status: .draft,
+            color: preferences.defaultColor,
+            source: .typed,
+            rawInput: rawInput,
+            createdAt: now
+        ))
     }
 
     @discardableResult
@@ -383,6 +428,7 @@ final class StickerManager: NSObject {
         guard hidden != areStickersHiddenByCapture else { return }
         areStickersHiddenByCapture = hidden
         applyVisibility()
+        onCaptureHidingChange?(hidden)
     }
 
     private func applyVisibility() {
@@ -596,6 +642,7 @@ final class StickerManager: NSObject {
     // MARK: Pointer and hint
 
     private func dispatch(_ sample: PointerSample) {
+        onPointerSample?(sample)
         guard !isAnythingHidden else { return }
         for controller in controllers {
             controller.pointerDidUpdate(sample)
@@ -603,6 +650,7 @@ final class StickerManager: NSObject {
     }
 
     private func needsPolling(at location: CGPoint) -> Bool {
+        if alsoNeedsPolling?(location) == true { return true }
         guard !isAnythingHidden else { return false }
         return controllers.contains { $0.wantsPointerUpdates(at: location) }
     }

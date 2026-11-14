@@ -75,6 +75,42 @@ final class Tuning {
     var toastOutDuration: Double = 0.150
     var toastShift: Double = 8
 
+    // MARK: Call zone and pad (4.1, 4.2)
+
+    /// How deep the zone reaches into the screen: a free edge, and one shared with a display or the Dock.
+    var zoneDepthFree: Double = 4
+    var zoneDepthStrict: Double = 10
+    /// The zone's extent as fractions of the visible height, from the top.
+    var zoneTop: Double = 0.35
+    var zoneBottom: Double = 0.65
+    var zoneMaxSpeedFree: Double = 600
+    var zoneMaxSpeedStrict: Double = 150
+    var zonePeekDelayFree: Double = 0.25
+    var zonePeekDelayStrict: Double = 0.45
+    var zoneOpenDelayFree: Double = 0.15
+    var zoneOpenDelayStrict: Double = 0.20
+    var zoneLeaveDelay: Double = 0.30
+    var tabWidth: Double = 4
+    var tabHeight: Double = 56
+    var tabOpacity: Double = 0.35
+    var padSize: Double = 112
+    var padPeekReach: Double = 28
+    var padOpenReach: Double = 96
+    var padPeekRotation: Double = -6
+    var padPeekDuration: Double = 0.18
+    var padOpenDuration: Double = 0.22
+    var padHideDuration: Double = 0.16
+
+    // MARK: Draft (4.3)
+
+    var draftMinHeight: Double = 160
+    var draftMaxHeight: Double = 360
+    var draftGap: Double = 12
+    var draftFromPadDuration: Double = 0.22
+    var draftFromHotkeyDuration: Double = 0.12
+    var draftFromPadStartScale: Double = 0.96
+    var draftFromHotkeyStartScale: Double = 0.98
+
     // MARK: Screen sharing (5.2)
 
     /// How often the app asks whether the screen is being captured.
@@ -112,6 +148,9 @@ final class Tuning {
     /// and is hidden in Mission Control. For comparing how stickers behave when
     /// the desktop changes.
     var spacesBehaviorTransient = false
+    /// On: a cursor that flew into the zone is ignored until it leaves and comes
+    /// back slowly. Off: it may stop in the zone and still call the pad.
+    var zoneRejectsFastEntry = false
     /// On (spec 4.10): ⌘Z brings a peeled sticker back while its toast is up. The
     /// key is taken from the app in front for those few seconds, or until the next click.
     var undoPeelUsesCommandZ = true

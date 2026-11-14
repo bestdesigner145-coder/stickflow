@@ -454,6 +454,101 @@ enum SelfCheck {
             } else {
                 check(false, "a probe sticker is created for the key test")
             }
+
+            // 12. The way in (stage 2): call zone, pad and draft (spec 4.1–4.3).
+            let entry = environment.entry
+            entry.ignoresLivePointer = true
+            if let zone = entry.zoneFrame {
+                let spot = CGPoint(x: zone.midX, y: zone.midY)
+                let far = CGPoint(x: zone.midX - 500, y: zone.midY)
+                var clockTime = 1000.0
+                func hold(_ location: CGPoint, for seconds: Double) {
+                    let end = clockTime + seconds
+                    while clockTime < end {
+                        entry.pointerDidUpdate(
+                            PointerSample(location: location, modifiers: [], isMouseDown: false, time: clockTime),
+                            isScripted: true
+                        )
+                        clockTime += 1.0 / 60
+                    }
+                }
+                note("call zone \(zone)")
+                hold(spot, for: 0.2)
+                check(entry.phase == .idle, "the pad stays hidden before the cursor has rested in the zone")
+                hold(spot, for: 0.1)
+                check(entry.phase == .peek, "a cursor resting in the zone makes the pad peek (\(entry.phase))")
+                check(abs((entry.visiblePadFrame?.width ?? 0) - CGFloat(tuning.padPeekReach)) < 1, "the pad peeks out by 28 pt (\(String(describing: entry.visiblePadFrame)))")
+                hold(spot, for: 0.3)
+                check(entry.phase == .open, "staying a little longer brings the pad out (\(entry.phase))")
+                check(abs((entry.visiblePadFrame?.width ?? 0) - CGFloat(tuning.padOpenReach)) < 1, "the pad comes out by 96 pt")
+                await pause(0.5)
+                snapshotView(entry.padSnapshotView, name: "12-pad")
+                if let screen = environment.displays.menuBarScreen {
+                    _ = captureScreen(entry.padWindowFrameForSnapshot.insetBy(dx: -20, dy: -20), on: screen, name: "12b-screen-pad")
+                }
+
+                let stickersBefore = stickers.controllers.count
+                entry.openDraft(from: .pad)
+                await pause(0.5)
+                let draft = entry.draft
+                check(draft.isOpen, "a click on the pad opens the draft")
+                check(draft.rootView.window?.isKeyWindow == true, "the draft has the keyboard")
+                note("frontmost app with the draft open: \(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "nil")")
+                if let padFrame = entry.visiblePadFrame, let draftFrame = draft.rootView.window?.frame {
+                    check(abs(padFrame.minX - draftFrame.maxX - CGFloat(tuning.draftGap)) < 1, "the draft stands next to the pad, not in the middle of the screen (\(draftFrame))")
+                    check(abs(draftFrame.midY - zone.midY) < 1, "the draft is centred on the pad")
+                }
+                check(!draft.rootView.stickButton.isEnabled, "the tick is off while the draft is empty")
+                snapshotView(draft.rootView, name: "13-draft-empty")
+                draft.rootView.textView.insertText("План\nКупить молоко\n- заметка", replacementRange: draft.rootView.textView.selectedRange())
+                await pause(0.2)
+                check(draft.rootView.stickButton.isEnabled, "the tick is on once there is text")
+                snapshotView(draft.rootView, name: "13b-draft-text")
+                if let screen = environment.displays.menuBarScreen, let draftFrame = draft.rootView.window?.frame {
+                    let area = draftFrame.union(entry.padWindowFrameForSnapshot).insetBy(dx: -20, dy: -20)
+                    _ = captureScreen(area, on: screen, name: "13c-screen-draft")
+                }
+                hold(far, for: 1.0)
+                check(entry.phase == .open, "the pad stays out while the draft is open")
+
+                draft.submit()
+                await pause(0.6)
+                check(!draft.isOpen, "sticking closes the draft")
+                check(NSApp.keyWindow == nil, "the keyboard goes back after the draft closes")
+                check(stickers.controllers.count == stickersBefore + 1, "the draft becomes a sticker")
+                if let stuck = stickers.controllers.last {
+                    let got = stuck.sticker.blocks.map { "\($0.kind.rawValue):\($0.text)" }
+                    check(stuck.sticker.title == "План" && got == ["todo:Купить молоко", "bullet:заметка"], "its lines become the title and the blocks (\(stuck.sticker.title), \(got))")
+                    check(stuck.sticker.rawInput == "План\nКупить молоко\n- заметка", "the text as typed is kept with the sticker")
+                }
+                hold(far, for: 0.5)
+                check(entry.phase == .idle, "with the draft gone and the cursor away the pad hides")
+
+                // The hotkey path, and Esc: the text is kept as a draft.
+                entry.toggleDraft()
+                await pause(0.4)
+                check(draft.isOpen && entry.phase == .open, "the quick-input hotkey opens the draft and brings the pad out")
+                draft.rootView.textView.insertText("Отложенное", replacementRange: draft.rootView.textView.selectedRange())
+                entry.toggleDraft()
+                await pause(0.4)
+                check(!draft.isOpen, "the hotkey pressed again closes the draft")
+                do {
+                    let drafts = try environment.repository.stickers(status: .draft)
+                    check(drafts.contains { $0.title == "Отложенное" }, "a closed draft is kept (\(drafts.map(\.title)))")
+                } catch {
+                    check(false, "drafts can be read (\(error))")
+                }
+
+                // Screen sharing hides the way in together with the stickers (spec 5.2).
+                stickers.screenCaptureDidChange(true)
+                entry.toggleDraft()
+                check(!draft.isOpen, "no draft while the screen is captured")
+                stickers.screenCaptureDidChange(false)
+                await pause(1.3)
+            } else {
+                check(false, "there is a call zone on the sticker screen")
+            }
+            entry.ignoresLivePointer = false
         }
 
         // MARK: Snapshots
@@ -465,6 +560,16 @@ enum SelfCheck {
             view.layoutSubtreeIfNeeded()
             view.displayIfNeeded()
 
+            if let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                view.cacheDisplay(in: view.bounds, to: rep)
+                write(rep, name: name)
+            }
+        }
+
+        /// Renders any view the way it draws itself.
+        func snapshotView(_ view: NSView, name: String) {
+            view.layoutSubtreeIfNeeded()
+            view.displayIfNeeded()
             if let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
                 view.cacheDisplay(in: view.bounds, to: rep)
                 write(rep, name: name)

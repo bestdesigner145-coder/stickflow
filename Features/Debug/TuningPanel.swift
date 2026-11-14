@@ -29,10 +29,12 @@ final class TuningPanelController {
                 },
                 onTuningChange: {
                     environment.stickers.applyPreferences()
+                    environment.entry.applySettings()
                 },
                 onPreferencesChange: {
                     environment.preferences.persist()
                     environment.stickers.applyPreferences()
+                    environment.entry.applySettings()
                 }
             )
             let newWindow = NSWindow(contentViewController: NSHostingController(rootView: view))
@@ -214,6 +216,8 @@ struct TuningPanelView: View {
                       isOn: $tuning.focusReturnUsesHelperPanel, onChange: onTuningChange)
             ToggleRow(title: "Spaces: transient instead of stationary",
                       isOn: $tuning.spacesBehaviorTransient, onChange: onTuningChange)
+            ToggleRow(title: "Zone: reject fast entry",
+                      isOn: $tuning.zoneRejectsFastEntry, onChange: onTuningChange)
             ToggleRow(title: "⌘Z restores a peeled sticker while the toast is up",
                       isOn: $tuning.undoPeelUsesCommandZ, onChange: onTuningChange)
         } header: {
