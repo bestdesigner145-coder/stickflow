@@ -10,7 +10,23 @@ public enum PlainTextPlan {
         public var title: String
         public var blocks: [Block]
 
+        public init(title: String, blocks: [Block]) {
+            self.title = title
+            self.blocks = blocks
+        }
+
         public var isEmpty: Bool { title.isEmpty && blocks.isEmpty }
+    }
+
+    /// The text is a list already: several lines, or a line that starts with a
+    /// marker. Such text is stuck as it is; one paragraph, typed or dictated, is
+    /// for a structurer to take apart (spec 8).
+    public static func looksStructured(_ text: String) -> Bool {
+        let lines = text.split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        guard lines.count == 1, let only = lines.first else { return lines.count > 1 }
+        return ["- ", "[] ", "[ ] ", "[x] ", "## "].contains { only.hasPrefix($0) }
     }
 
     /// - Parameter plainLineKind: what a line without a marker becomes. A sticker

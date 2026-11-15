@@ -4,7 +4,7 @@
 #if DEBUG
 // The self-check is one long scripted scenario with wordy check labels;
 // the size and length limits are for product code.
-// swiftlint:disable function_body_length cyclomatic_complexity large_tuple line_length
+// swiftlint:disable function_body_length cyclomatic_complexity large_tuple line_length type_body_length
 import AppKit
 import StickflowCore
 
@@ -695,11 +695,35 @@ enum SelfCheck {
             entry.toggleDraft()
             await pause(0.3)
             entry.draft.rootView.textView.insertText("Без полёта", replacementRange: entry.draft.rootView.textView.selectedRange())
-            entry.draft.submit()
+            entry.draft.submit(asIs: true)
             check(stickers.controllers.last?.isAirborne == false, "with Reduce Motion the sticker does not fly")
             await pause(0.5)
-            check(stickers.controllers.last?.sticker.title == "Без полёта" && stickers.controllers.last?.panel.isVisible == true, "it appears in its place")
+            check(stickers.controllers.last?.sticker.title == "Без полёта" && stickers.controllers.last?.panel.isVisible == true, "it appears in its place, stuck as it is")
             tuning.forcedReduceMotion = nil
+
+            // 15. Return takes a dictated paragraph apart with the rules (spec 8).
+            let countBeforePlan = stickers.controllers.count
+            let dictated = "Короче, сначала надо доделать экран кошелька, там типа пустые состояния и ошибки, "
+                + "потом созвон с разработкой в три, и если успею, условно, пост в телегу написать"
+            entry.toggleDraft()
+            await pause(0.3)
+            entry.draft.rootView.textView.insertText(dictated, replacementRange: entry.draft.rootView.textView.selectedRange())
+            entry.draft.submit()
+            await pause(1.2)
+            if stickers.controllers.count == countBeforePlan + 1, let planned = stickers.controllers.last {
+                let lines = planned.sticker.blocks.map { "\($0.kind.rawValue):\($0.indent):\($0.text)" }
+                let expected = [
+                    "todo:0:Доделать экран кошелька", "bullet:1:пустые состояния", "bullet:1:ошибки",
+                    "todo:0:Созвониться с разработкой — 15:00", "heading2:0:Если успею", "todo:0:Написать пост в телегу",
+                ]
+                check(planned.sticker.title == "План на сегодня", "a dictated paragraph gets the default title (\(planned.sticker.title))")
+                check(lines == expected, "the rules take it apart into tasks, details, a time and an optional section (\(lines))")
+                check(planned.sticker.rawInput == dictated, "what was said is kept with the sticker")
+                check(!entry.draft.isOpen, "the draft closes once the plan is stuck")
+                snapshot(planned, name: "16-structured")
+            } else {
+                check(false, "a dictated paragraph becomes a sticker (\(stickers.controllers.count - countBeforePlan) new)")
+            }
         }
 
         // MARK: Snapshots
@@ -765,5 +789,5 @@ enum SelfCheck {
         }
     }
 }
-// swiftlint:enable function_body_length cyclomatic_complexity large_tuple line_length
+// swiftlint:enable function_body_length cyclomatic_complexity large_tuple line_length type_body_length
 #endif

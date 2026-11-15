@@ -13,6 +13,10 @@ let package = Package(
     ],
     targets: [
         .target(name: "StickflowCore"),
-        .testTarget(name: "StickflowCoreTests", dependencies: ["StickflowCore"]),
+        .testTarget(
+            name: "StickflowCoreTests",
+            dependencies: ["StickflowCore"],
+            resources: [.copy("StructuringFixtures")]
+        ),
     ]
 )

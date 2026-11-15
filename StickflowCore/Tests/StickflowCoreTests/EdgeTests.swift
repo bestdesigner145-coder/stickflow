@@ -314,6 +314,18 @@ final class PlainTextPlanTests: XCTestCase {
         XCTAssertEqual(LabelFit.fontSize(base: 20, minimum: 13, widestWord: 69, available: 0), 20)
     }
 
+    func testTextThatIsAListAlready() {
+        XCTAssertTrue(PlainTextPlan.looksStructured("План\nКупить молоко"))
+        XCTAssertTrue(PlainTextPlan.looksStructured("- купить молоко"))
+        XCTAssertTrue(PlainTextPlan.looksStructured("  [] позвонить\n"))
+        XCTAssertTrue(PlainTextPlan.looksStructured("## Работа"))
+        XCTAssertFalse(PlainTextPlan.looksStructured("Сначала доделать экран, потом созвон в три"))
+        XCTAssertFalse(PlainTextPlan.looksStructured("\n  Купить молоко  \n\n"))
+        XCTAssertFalse(PlainTextPlan.looksStructured(""))
+        let result = PlainTextPlan.Result(title: "План", blocks: [Block(kind: .todo, text: "Дело")])
+        XCTAssertFalse(result.isEmpty)
+    }
+
     func testEmptyInputGivesNothing() {
         XCTAssertTrue(PlainTextPlan.make(from: "  \n\n\t").isEmpty)
         XCTAssertTrue(PlainTextPlan.make(from: "").isEmpty)

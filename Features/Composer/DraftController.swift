@@ -12,7 +12,9 @@ import StickflowCore
 @MainActor
 final class DraftController: NSObject, NSTextViewDelegate {
     /// Return or the tick: stick this text.
-    var onStick: ((String) -> Void)?
+    /// The second value is true for "stick as it is" (⌘Return), false for
+    /// "take apart and stick" (Return, the tick).
+    var onStick: ((String, Bool) -> Void)?
     /// Esc: close; the text is kept as a draft.
     var onCancel: ((String) -> Void)?
 
@@ -35,6 +37,7 @@ final class DraftController: NSObject, NSTextViewDelegate {
         panel.contentView = rootView
         rootView.textView.delegate = self
         rootView.textView.onSubmit = { [weak self] in self?.submit() }
+        rootView.textView.onSubmitAsIs = { [weak self] in self?.submit(asIs: true) }
         rootView.textView.onCancel = { [weak self] in self?.cancel() }
         rootView.stickButton.onClick = { [weak self] in self?.submit() }
 
@@ -129,9 +132,14 @@ final class DraftController: NSObject, NSTextViewDelegate {
     }
 
     /// Return, ⌘Return or the tick. Does nothing while the draft is empty.
-    func submit() {
-        guard isOpen, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        onStick?(text)
+    /// While on, the draft is being taken apart: it accepts no second Return.
+    var isBusy = false {
+        didSet { rootView.stickButton.isEnabled = !isBusy && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+
+    func submit(asIs: Bool = false) {
+        guard isOpen, !isBusy, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        onStick?(text, asIs)
     }
 
     /// Esc, or the hotkey pressed again.
@@ -347,6 +355,8 @@ final class DraftView: NSView {
 /// The draft's plain text field with its keys (spec 4.3).
 final class DraftTextView: NSTextView {
     var onSubmit: (() -> Void)?
+    /// ⌘Return: stick the text as it is, without taking it apart.
+    var onSubmitAsIs: (() -> Void)?
     var onCancel: (() -> Void)?
     var placeholder = ""
     var placeholderColor = NSColor.placeholderTextColor
@@ -394,7 +404,7 @@ final class DraftTextView: NSTextView {
             case KeyCode.keyX: cut(nil)
             case KeyCode.keyV: pasteAsPlainText(nil)
             case KeyCode.keyZ: undoManager?.undo()
-            case KeyCode.returnKey, KeyCode.enter: onSubmit?()
+            case KeyCode.returnKey, KeyCode.enter: onSubmitAsIs?()
             default: return super.performKeyEquivalent(with: event)
             }
             return true

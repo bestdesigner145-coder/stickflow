@@ -84,7 +84,14 @@ final class AppEnvironment {
             pointer: PointerTracker(mouse: pointerSource, modifiers: pointerSource, clock: clock)
         )
         self.stickers = stickers
-        entry = EntryController(tuning: tuning, preferences: preferences, displays: displays, stickers: stickers)
+        entry = EntryController(
+            tuning: tuning,
+            preferences: preferences,
+            displays: displays,
+            stickers: stickers,
+            structurer: RuleStructurer(),
+            clock: clock
+        )
     }
 
     /// Settings that start empty and are never written to disk.

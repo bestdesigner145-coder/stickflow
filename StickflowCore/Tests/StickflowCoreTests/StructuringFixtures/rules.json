@@ -1,0 +1,674 @@
+[
+ {
+  "input": "Короче, сначала надо доделать экран кошелька, там типа пустые состояния и ошибки, потом созвон с разработкой в три, и если успею, условно, пост в телегу написать",
+  "plan": {
+   "title": "План на сегодня",
+   "sections": [
+    {
+     "heading": null,
+     "items": [
+      {
+       "text": "Доделать экран кошелька",
+       "task": true,
+       "time": null,
+       "children": [
+        "пустые состояния",
+        "ошибки"
+       ]
+      },
+      {
+       "text": "Созвониться с разработкой",
+       "task": true,
+       "time": "15:00",
+       "children": []
+      }
+     ]
+    },
+    {
+     "heading": "Если успею",
+     "items": [
+      {
+       "text": "Написать пост в телегу",
+       "task": true,
+       "time": null,
+       "children": []
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "input": "Ну вот, мне нужно сегодня проверить макеты онбординга. Потом в 11 созвон с Петей, и ещё отправить счёт бухгалтерии, это важно",
+  "plan": {
+   "title": "План на сегодня",
+   "sections": [
+    {
+     "heading": null,
+     "items": [
+      {
+       "text": "Проверить макеты онбординга",
+       "task": true,
+       "time": null,
+       "children": []
+      },
+      {
+       "text": "Созвониться с Петей",
+       "task": true,
+       "time": "11:00",
+       "children": []
+      },
+      {
+       "text": "Отправить счёт бухгалтерии",
+       "task": true,
+       "time": null,
+       "children": []
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "input": "В общем по лендингу Маши: поправить шапку, заменить фотки в кейсах и проверить мобилку. А, и купить молоко",
+  "plan": {
+   "title": "План на сегодня",
+   "sections": [
+    {
+     "heading": null,
+     "items": [
+      {
+       "text": "Купить молоко",
+       "task": true,
+       "time": null,
+       "children": []
+      }
+     ]
+    },
+    {
+     "heading": "По лендингу Маши",
+     "items": [
+      {
+       "text": "Поправить шапку",
+       "task": true,
+       "time": null,
+       "children": []
+      },
+      {
+       "text": "Заменить фотки в кейсах",
+       "task": true,
+       "time": null,
+       "children": []
+      },
+      {
+       "text": "Проверить мобилку",
+       "task": true,
+       "time": null,
+       "children": []
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "input": "Так, значит, сегодня надо позвонить в банк, потом забрать посылку и ещё записаться к врачу на пятницу",
+  "plan": {
+   "title": "План на сегодня",
+   "sections": [
+    {
+     "heading": null,
+     "items": [
+      {
+       "text": "Позвонить в банк",
+       "task": true,
+       "time": null,
+       "children": []
+      },
+      {
+       "text": "Забрать посылку",
+       "task": true,
+       "time": null,
+       "children": []
+      },
+      {
+       "text": "Записаться к врачу на пятницу",
+       "task": true,
+       "time": null,
+       "children": []
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "input": "Сделать презентацию для Димы к пяти, там три слайда про метрики и один про планы",
+  "plan": {
+   "title": "План на сегодня",
+   "sections": [
+    {
+     "heading": null,
+     "items": [
+      {
+       "text": "Сделать презентацию для Димы к пяти",
+       "task": true,
+       "time": null,
+       "children": [
+        "три слайда про метрики",
+        "один про планы"
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "input": "Встреча с командой в 14:30, потом обед, потом ревью макетов в 4 часа дня",
+  "plan": {
+   "title": "План на сегодня",
+   "sections": [
+    {
+     "heading": null,
+     "items": [
+      {
+       "text": "Встреча с командой",
+       "task": true,
+       "time": "14:30",
+       "children": []
+      },
+      {
+       "text": "Обед",
+       "task": true,
+       "time": null,
+       "children": []
+      },
+      {
+       "text": "Ревью макетов",
+       "task": true,
+       "time": "16:00",
+       "children": []
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "input": "Купить молоко, хлеб и сыр",
+  "plan": {
+   "title": "План на сегодня",
+   "sections": [
+    {
+     "heading": null,
+     "items": [
+      {
+       "text": "Купить молоко, хлеб и сыр",
+       "task": true,
+       "time": null,
+       "children": []
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "input": "Переписать текст в 2 раза короче и отправить Ане",
+  "plan": {
+   "title": "План на сегодня",
+   "sections": [
+    {
+     "heading": null,
+     "items": [
+      {
+       "text": "Переписать текст в 2 раза короче",
+       "task": true,
+       "time": null,
+       "children": []
+      },
+      {
+       "text": "Отправить Ане",
+       "task": true,
+       "time": null,
+       "children": []
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "input": "По работе: закрыть задачу с кнопкой, написать Саше про релиз. По дому: помыть окна, если успею разобрать шкаф",
+  "plan": {
+   "title": "План на сегодня",
+   "sections": [
+    {
+     "heading": "По работе",
+     "items": [
+      {
+       "text": "Закрыть задачу с кнопкой",
+       "task": true,
+       "time": null,
+       "children": []
+      },
+      {
+       "text": "Написать Саше про релиз",
+       "task": true,
+       "time": null,
+       "children": []
+      }
+     ]
+    },
+    {
+     "heading": "По дому",
+     "items": [
+      {
+       "text": "Помыть окна",
+       "task": true,
+       "time": null,
+       "children": []
+      }
+     ]
+    },
+    {
+     "heading": "Если успею",
+     "items": [
+      {
+       "text": "Разобрать шкаф",
+       "task": true,
+       "time": null,
+       "children": []
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "input": "Надо бы наверное оплатить интернет, желательно ещё заказать воду",
+  "plan": {
+   "title": "План на сегодня",
+   "sections": [
+    {
+     "heading": null,
+     "items": [
+      {
+       "text": "Оплатить интернет",
+       "task": true,
+       "time": null,
+       "children": []
+      }
+     ]
+    },
+    {
+     "heading": "Если успею",
+     "items": [
+      {
+       "text": "Заказать воду",
+       "task": true,
+       "time": null,
+       "children": []
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "input": "Проверить почту",
+  "plan": {
+   "title": "План на сегодня",
+   "sections": [
+    {
+     "heading": null,
+     "items": [
+      {
+       "text": "Проверить почту",
+       "task": true,
+       "time": null,
+       "children": []
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "input": "Созвон с Петей в 9 утра, в полдень обед с Машей, вечером в 8 вечера спортзал",
+  "plan": {
+   "title": "План на сегодня",
+   "sections": [
+    {
+     "heading": null,
+     "items": [
+      {
+       "text": "Созвониться с Петей",
+       "task": true,
+       "time": "09:00",
+       "children": []
+      },
+      {
+       "text": "Обед с Машей",
+       "task": true,
+       "time": "12:00",
+       "children": []
+      },
+      {
+       "text": "Вечером спортзал",
+       "task": true,
+       "time": "20:00",
+       "children": []
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "input": "Отправить отчёт до 18:00 и согласовать бюджет 250 тысяч с Олегом",
+  "plan": {
+   "title": "План на сегодня",
+   "sections": [
+    {
+     "heading": null,
+     "items": [
+      {
+       "text": "Отправить отчёт до 18:00",
+       "task": true,
+       "time": null,
+       "children": []
+      },
+      {
+       "text": "Согласовать бюджет 250 тысяч с Олегом",
+       "task": true,
+       "time": null,
+       "children": []
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "input": "Найти и исправить баг в авторизации, потом выкатить версию 2.1.3",
+  "plan": {
+   "title": "План на сегодня",
+   "sections": [
+    {
+     "heading": null,
+     "items": [
+      {
+       "text": "Найти и исправить баг в авторизации",
+       "task": true,
+       "time": null,
+       "children": []
+      },
+      {
+       "text": "Выкатить версию 2.1.3",
+       "task": true,
+       "time": null,
+       "children": []
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "input": "Подготовиться к собеседованию, там резюме, портфолио, и ответы на вопросы, потом лечь спать пораньше",
+  "plan": {
+   "title": "План на сегодня",
+   "sections": [
+    {
+     "heading": null,
+     "items": [
+      {
+       "text": "Подготовиться к собеседованию",
+       "task": true,
+       "time": null,
+       "children": [
+        "резюме",
+        "портфолио",
+        "ответы на вопросы"
+       ]
+      },
+      {
+       "text": "Лечь спать пораньше",
+       "task": true,
+       "time": null,
+       "children": []
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "input": "Встреча 15.11 с подрядчиком, обсудить смету",
+  "plan": {
+   "title": "План на сегодня",
+   "sections": [
+    {
+     "heading": null,
+     "items": [
+      {
+       "text": "Встреча 15.11 с подрядчиком, обсудить смету",
+       "task": true,
+       "time": null,
+       "children": []
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "input": "Написать пост, если успею",
+  "plan": {
+   "title": "План на сегодня",
+   "sections": [
+    {
+     "heading": "Если успею",
+     "items": [
+      {
+       "text": "Написать пост",
+       "task": true,
+       "time": null,
+       "children": []
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "input": "Забрать вещи из химчистки в 18.30, купить корм коту, позвонить маме",
+  "plan": {
+   "title": "План на сегодня",
+   "sections": [
+    {
+     "heading": null,
+     "items": [
+      {
+       "text": "Забрать вещи из химчистки",
+       "task": true,
+       "time": "18:30",
+       "children": []
+      },
+      {
+       "text": "Купить корм коту",
+       "task": true,
+       "time": null,
+       "children": []
+      },
+      {
+       "text": "Позвонить маме",
+       "task": true,
+       "time": null,
+       "children": []
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "input": "Слушай, нужно обновить дизайн-систему, там кнопки, инпуты и тени, затем показать Кате в час",
+  "plan": {
+   "title": "План на сегодня",
+   "sections": [
+    {
+     "heading": null,
+     "items": [
+      {
+       "text": "Обновить дизайн-систему",
+       "task": true,
+       "time": null,
+       "children": [
+        "кнопки",
+        "инпуты",
+        "тени"
+       ]
+      },
+      {
+       "text": "Показать Кате",
+       "task": true,
+       "time": "13:00",
+       "children": []
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "input": "Виртуальная карта: дорисовать экран пополнения, проверить тексты ошибок, отдать в разработку",
+  "plan": {
+   "title": "Виртуальная карта",
+   "sections": [
+    {
+     "heading": "Виртуальная карта",
+     "items": [
+      {
+       "text": "Дорисовать экран пополнения",
+       "task": true,
+       "time": null,
+       "children": []
+      },
+      {
+       "text": "Проверить тексты ошибок",
+       "task": true,
+       "time": null,
+       "children": []
+      },
+      {
+       "text": "Отдать в разработку",
+       "task": true,
+       "time": null,
+       "children": []
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "input": "Заказать такси на 6 утра и собрать чемодан",
+  "plan": {
+   "title": "План на сегодня",
+   "sections": [
+    {
+     "heading": null,
+     "items": [
+      {
+       "text": "Заказать такси на 6 утра",
+       "task": true,
+       "time": null,
+       "children": []
+      },
+      {
+       "text": "Собрать чемодан",
+       "task": true,
+       "time": null,
+       "children": []
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "input": "First I need to finish the wallet screen, then call the dev team at 3, and if I have time write a post",
+  "plan": {
+   "title": "Plan for today",
+   "sections": [
+    {
+     "heading": null,
+     "items": [
+      {
+       "text": "Finish the wallet screen",
+       "task": true,
+       "time": null,
+       "children": []
+      },
+      {
+       "text": "Call the dev team",
+       "task": true,
+       "time": "15:00",
+       "children": []
+      }
+     ]
+    },
+    {
+     "heading": "If there is time",
+     "items": [
+      {
+       "text": "Write a post",
+       "task": true,
+       "time": null,
+       "children": []
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "input": "So first I need to email Anna, also book a table at 7 pm, and then, if possible, review the deck",
+  "plan": {
+   "title": "Plan for today",
+   "sections": [
+    {
+     "heading": null,
+     "items": [
+      {
+       "text": "Email Anna",
+       "task": true,
+       "time": null,
+       "children": []
+      },
+      {
+       "text": "Book a table",
+       "task": true,
+       "time": "19:00",
+       "children": []
+      }
+     ]
+    },
+    {
+     "heading": "If there is time",
+     "items": [
+      {
+       "text": "Review the deck",
+       "task": true,
+       "time": null,
+       "children": []
+      }
+     ]
+    }
+   ]
+  }
+ }
+]

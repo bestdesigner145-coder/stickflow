@@ -14,6 +14,10 @@ final class EntryController: NSObject {
     private let preferences: Preferences
     private let displays: any ScreenGeometry
     private let stickers: StickerManager
+    /// Takes dictated or typed text apart into a plan (spec 8).
+    private let structurer: any Structurer
+    private let clock: any AppClock
+    private var structuring: Task<Void, Never>?
 
     private var detector = EdgeIntentDetector()
     private(set) var phase: EdgeIntentDetector.Phase = .idle
@@ -34,7 +38,16 @@ final class EntryController: NSObject {
     /// Space around the pad inside its window, for the tilt and the glow.
     private static let padMargin: CGFloat = 24
 
-    init(tuning: Tuning, preferences: Preferences, displays: any ScreenGeometry, stickers: StickerManager) {
+    init(
+        tuning: Tuning,
+        preferences: Preferences,
+        displays: any ScreenGeometry,
+        stickers: StickerManager,
+        structurer: any Structurer,
+        clock: any AppClock
+    ) {
+        self.structurer = structurer
+        self.clock = clock
         self.tuning = tuning
         self.preferences = preferences
         self.displays = displays
@@ -57,8 +70,8 @@ final class EntryController: NSObject {
             self?.openDraft(from: .pad)
         }
 
-        draft.onStick = { [weak self] text in
-            self?.stickDraft(text)
+        draft.onStick = { [weak self] text, asIs in
+            self?.stickDraft(text, asIs: asIs)
         }
         draft.onCancel = { [weak self] text in
             self?.cancelDraft(text)
@@ -326,9 +339,33 @@ final class EntryController: NSObject {
         stickers.pointerNeedsAttention()
     }
 
-    private func stickDraft(_ text: String) {
-        // Structuring arrives in stage 3; until then Return sticks the text as it is.
-        let plan = PlainTextPlan.make(from: text, plainLineKind: tuning.newLineAfterTitleIsTodo ? .todo : .text)
+    /// Return takes the text apart first; ⌘Return, or text that is a list already,
+    /// is stuck as it is (spec 4.3).
+    private func stickDraft(_ text: String, asIs: Bool) {
+        guard !asIs, !PlainTextPlan.looksStructured(text) else {
+            stick(PlainTextPlan.make(from: text, plainLineKind: tuning.newLineAfterTitleIsTodo ? .todo : .text), rawInput: text)
+            return
+        }
+        let request = StructureRequest(text: text, locale: .current, now: clock.now)
+        let structurer = self.structurer
+        draft.isBusy = true
+        structuring?.cancel()
+        structuring = Task { [weak self] in
+            let plan = try? await structurer.structure(request)
+            guard let self, !Task.isCancelled else { return }
+            self.draft.isBusy = false
+            guard self.draft.isOpen, self.draft.text == text else { return }
+            if let plan = plan?.normalized(), !plan.isEmpty {
+                self.stick(PlainTextPlan.Result(title: plan.title, blocks: plan.blocks()), rawInput: text)
+            } else {
+                // Nothing came of it: the text is stuck as it was typed.
+                let fallback = PlainTextPlan.make(from: text, plainLineKind: self.tuning.newLineAfterTitleIsTodo ? .todo : .text)
+                self.stick(fallback, rawInput: text)
+            }
+        }
+    }
+
+    private func stick(_ plan: PlainTextPlan.Result, rawInput text: String) {
         let draftFrame = draft.frameOnScreen
         draft.close(animated: true)
         stickers.stick(plan, rawInput: text, flyingFrom: draftFrame)
@@ -336,6 +373,9 @@ final class EntryController: NSObject {
     }
 
     private func cancelDraft(_ text: String) {
+        structuring?.cancel()
+        structuring = nil
+        draft.isBusy = false
         let plan = PlainTextPlan.make(from: text, plainLineKind: tuning.newLineAfterTitleIsTodo ? .todo : .text)
         draft.close(animated: true)
         stickers.keepDraft(plan, rawInput: text)
