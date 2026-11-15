@@ -16,9 +16,11 @@ final class GigaAMEngine: SpeechEngine {
     let store: SpeechModelStore
     private let runner: GigaAMRunner
 
-    init(store: SpeechModelStore, computeUnits: MLComputeUnits = .cpuAndGPU) {
+    /// - Parameter idleUnload: seconds after the last use at which the models
+    ///   leave memory (about half a gigabyte); the next dictation loads them again.
+    init(store: SpeechModelStore, computeUnits: MLComputeUnits = .cpuAndGPU, idleUnload: TimeInterval = 120) {
         self.store = store
-        runner = GigaAMRunner(computeUnits: computeUnits)
+        runner = GigaAMRunner(computeUnits: computeUnits, idleUnload: idleUnload)
     }
 
     var isSupported: Bool {
@@ -49,6 +51,17 @@ final class GigaAMEngine: SpeechEngine {
         return text
     }
 
+    /// Loads the models ahead of the first transcription, e.g. while the user is
+    /// still speaking. Does nothing if the model is not on this Mac.
+    func warmUp() async {
+        guard isReady else { return }
+        try? await runner.loadIfNeeded(from: store)
+    }
+
+    var isLoaded: Bool {
+        get async { await runner.isLoaded }
+    }
+
     /// Where the time of the last transcription went, for the probe.
     func lastTimings() async -> String {
         await runner.timings
@@ -77,17 +90,39 @@ private actor GigaAMRunner {
     private static let stateSize = 320
 
     private let computeUnits: MLComputeUnits
+    private let idleUnload: TimeInterval
+    /// Counts uses, so that a pending unload knows whether it is still due.
+    private var useCount = 0
     private let frontend = MelFrontend()
     private let chunker = SpeechChunker()
     private var models: Models?
     /// Seconds spent on the features, the encoder and the decoding last time.
     private(set) var timings = ""
 
-    init(computeUnits: MLComputeUnits) {
+    init(computeUnits: MLComputeUnits, idleUnload: TimeInterval) {
         self.computeUnits = computeUnits
+        self.idleUnload = idleUnload
+    }
+
+    var isLoaded: Bool { models != nil }
+
+    /// The models leave memory once nothing has used them for `idleUnload` seconds.
+    private func unloadWhenIdle() {
+        useCount += 1
+        let due = useCount
+        let delay = idleUnload
+        Task {
+            try? await Task.sleep(nanoseconds: UInt64(max(delay, 0) * 1_000_000_000))
+            self.unload(ifNotUsedSince: due)
+        }
+    }
+
+    private func unload(ifNotUsedSince count: Int) {
+        if useCount == count { models = nil }
     }
 
     func loadIfNeeded(from store: SpeechModelStore) async throws {
+        defer { unloadWhenIdle() }
         guard models == nil else { return }
         let encoder = try await load("GigaAMv3Encoder", from: store)
         let decoder = try await load("GigaAMv3DecoderStep", from: store)
@@ -118,6 +153,7 @@ private actor GigaAMRunner {
 
     func transcribe(_ samples: [Float]) throws -> String {
         guard let models else { throw SpeechError.unavailable }
+        defer { unloadWhenIdle() }
         var texts: [String] = []
         timings = ""
         for range in chunker.split(samples) {
@@ -222,14 +258,13 @@ final class SpeechRouter: SpeechEngine, @unchecked Sendable {
 
     func prepare(progress: @escaping @Sendable (Double) -> Void) async throws {
         if primary.isReady {
-            do {
-                try await primary.prepare(progress: progress)
-                return
-            } catch {
-                // A model that does not load must not take dictation away: go on with the fallback.
-            }
+            // The model is on this Mac. It loads while the user speaks, so the
+            // microphone opens at once.
+            let primary = self.primary
+            Task { await primary.warmUp() }
+            return
         }
-        let installing = primary.isReady ? nil : startInstalling(progress: progress)
+        let installing = startInstalling(progress: progress)
         do {
             try await fallback.prepare(progress: { _ in })
         } catch {
@@ -246,7 +281,9 @@ final class SpeechRouter: SpeechEngine, @unchecked Sendable {
             } catch SpeechError.nothingHeard {
                 throw SpeechError.nothingHeard
             } catch {
-                // Fall through to the fallback.
+                // A model that does not load must not take dictation away. The
+                // fallback was not asked for its permission yet: the model was there.
+                try await fallback.prepare(progress: { _ in })
             }
         }
         return try await fallback.transcribe(audio)

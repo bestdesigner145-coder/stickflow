@@ -87,7 +87,7 @@ final class AppEnvironment {
         // Tests and the self-check have no microphone: they get a scripted one.
         let isScripted = options.isUITesting || options.selfCheckDirectory != nil
         let recorder: any VoiceRecorder = isScripted ? ScriptedRecorder() : MicrophoneRecorder()
-        let speech: any SpeechEngine = isScripted ? ScriptedSpeechEngine() : Self.makeSpeechEngine()
+        let speech: any SpeechEngine = isScripted ? ScriptedSpeechEngine() : Self.makeSpeechEngine(idleUnload: tuning.speechModelIdleUnload)
         entry = EntryController(
             tuning: tuning,
             preferences: preferences,
@@ -102,13 +102,14 @@ final class AppEnvironment {
     /// Settings that start empty and are never written to disk.
     /// Spec 7: Russian, recognised on this Mac. GigaAM once its model has been
     /// downloaded, Apple's recogniser until then and on macOS 14.
-    private static func makeSpeechEngine() -> any SpeechEngine {
+    private static func makeSpeechEngine(idleUnload: TimeInterval) -> any SpeechEngine {
         let apple = AppleSpeechEngine(locale: Locale(identifier: "ru-RU"))
         guard let manifest = try? SpeechModelManifest.bundled(named: "gigaam-v3-e2e-rnnt"),
               let root = try? SpeechModelStore.defaultRoot() else {
             return apple
         }
-        return SpeechRouter(primary: GigaAMEngine(store: SpeechModelStore(manifest: manifest, root: root)), fallback: apple)
+        let store = SpeechModelStore(manifest: manifest, root: root)
+        return SpeechRouter(primary: GigaAMEngine(store: store, idleUnload: idleUnload), fallback: apple)
     }
 
     private static func throwawayDefaults() -> UserDefaults {

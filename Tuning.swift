@@ -215,6 +215,9 @@ final class Tuning {
     var dictationTick: Double = 0.05
     /// One beat of the microphone's pulse while it records.
     var dictationPulseDuration: Double = 0.6
+    /// The speech model (about half a gigabyte in memory) is let go this long
+    /// after the last dictation. Read once, at launch.
+    var speechModelIdleUnload: Double = 120
 
     /// What a draft with text does when the keyboard goes elsewhere or the desktop
     /// changes. Off: it stays on screen. On: it closes and is kept as a draft, the
