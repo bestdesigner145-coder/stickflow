@@ -578,6 +578,125 @@
           }
         }
       }
+    },
+    "draft.dictate.stop": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop Recording"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Остановить запись"
+          }
+        }
+      }
+    },
+    "dictation.listening": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listening…"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Слушаю…"
+          }
+        }
+      }
+    },
+    "dictation.error.microphone": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No access to the microphone. Allow it in System Settings → Privacy & Security → Microphone."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет доступа к микрофону. Разрешите его: Системные настройки → Конфиденциальность и безопасность → Микрофон."
+          }
+        }
+      }
+    },
+    "dictation.error.recognition": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No access to speech recognition. Allow it in System Settings → Privacy & Security → Speech Recognition."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет доступа к распознаванию речи. Разрешите его: Системные настройки → Конфиденциальность и безопасность → Распознавание речи."
+          }
+        }
+      }
+    },
+    "dictation.error.no_on_device": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Mac can recognize Russian speech only through a server, and Stickflow never sends your voice anywhere. Turn on Dictation for Russian in System Settings → Keyboard → Dictation."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Этот Mac распознаёт русскую речь только через сервер, а Stickflow голос в сеть не отправляет. Включите Диктовку для русского: Системные настройки → Клавиатура → Диктовка."
+          }
+        }
+      }
+    },
+    "dictation.error.nothing_heard": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t hear anything. Try again."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ничего не расслышал. Попробуйте ещё раз."
+          }
+        }
+      }
+    },
+    "dictation.error.failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t recognize the speech. Try again."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не получилось распознать. Попробуйте ещё раз."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

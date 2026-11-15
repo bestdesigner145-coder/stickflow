@@ -84,12 +84,18 @@ final class AppEnvironment {
             pointer: PointerTracker(mouse: pointerSource, modifiers: pointerSource, clock: clock)
         )
         self.stickers = stickers
+        // Tests and the self-check have no microphone: they get a scripted one.
+        let isScripted = options.isUITesting || options.selfCheckDirectory != nil
+        let recorder: any VoiceRecorder = isScripted ? ScriptedRecorder() : MicrophoneRecorder()
+        // Spec 7: Russian, recognised on this Mac.
+        let speech: any SpeechEngine = isScripted ? ScriptedSpeechEngine() : AppleSpeechEngine(locale: Locale(identifier: "ru-RU"))
         entry = EntryController(
             tuning: tuning,
             preferences: preferences,
             displays: displays,
             stickers: stickers,
             structurer: RuleStructurer(),
+            dictation: Dictation(recorder: recorder, engine: speech, tuning: tuning),
             clock: clock
         )
     }

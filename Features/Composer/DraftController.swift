@@ -29,9 +29,13 @@ final class DraftController: NSObject, NSTextViewDelegate {
     private var bounds = CGRect.zero
     private var isClosing = false
 
-    init(tuning: Tuning, preferences: Preferences) {
+    /// Voice into the draft (spec 7).
+    let dictation: Dictation
+
+    init(tuning: Tuning, preferences: Preferences, dictation: Dictation) {
         self.tuning = tuning
         self.preferences = preferences
+        self.dictation = dictation
         rootView = DraftView(frame: NSRect(x: 0, y: 0, width: 232, height: 160))
         super.init()
         panel.contentView = rootView
@@ -40,6 +44,15 @@ final class DraftController: NSObject, NSTextViewDelegate {
         rootView.textView.onSubmitAsIs = { [weak self] in self?.submit(asIs: true) }
         rootView.textView.onCancel = { [weak self] in self?.cancel() }
         rootView.stickButton.onClick = { [weak self] in self?.submit() }
+        rootView.onMicrophone = { [weak self] in self?.dictation.toggle() }
+        rootView.textView.onSpace = { [weak self] in
+            // Space stops a recording instead of typing a space (spec 4.3).
+            guard let self, self.dictation.state == .recording else { return false }
+            self.dictation.toggle()
+            return true
+        }
+        dictation.onChange = { [weak self] in self?.dictationDidChange() }
+        dictation.onText = { [weak self] text in self?.insertDictated(text) }
 
         // An empty draft must not hang around once the user has moved on.
         NotificationCenter.default.addObserver(
@@ -66,7 +79,8 @@ final class DraftController: NSObject, NSTextViewDelegate {
     /// desktop. An empty draft closes and leaves nothing behind. A draft with text
     /// stays where it is, unless the Tuning switch says to put it away as a draft.
     func attentionDidLeave() {
-        guard isOpen, !keepsOpenWithoutFocus else { return }
+        // A draft that is listening is in use, wherever the keyboard is.
+        guard isOpen, !keepsOpenWithoutFocus, !dictation.isBusy else { return }
         let isEmpty = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         guard isEmpty || tuning.draftWithTextClosesOnFocusLoss else { return }
         cancel()
@@ -83,6 +97,33 @@ final class DraftController: NSObject, NSTextViewDelegate {
     /// Where the draft is on screen.
     var frameOnScreen: CGRect {
         panel.frame
+    }
+
+    private func dictationDidChange() {
+        // The permission dialogs take the keyboard; the draft must outlive them.
+        let wasWaiting = keepsOpenWithoutFocus
+        keepsOpenWithoutFocus = dictation.state == .preparing
+        rootView.dictation = DictationStatus(
+            state: dictation.state,
+            elapsed: dictation.elapsed,
+            level: dictation.level,
+            message: dictation.message,
+            isEnding: DictationClock.isEnding(elapsed: dictation.elapsed, limit: tuning.dictationLimit, warning: tuning.dictationWarning)
+        )
+        guard isOpen else { return }
+        layoutPanel()
+        if wasWaiting, !keepsOpenWithoutFocus, !panel.isKeyWindow {
+            panel.makeKey()
+            panel.makeFirstResponder(rootView.textView)
+        }
+    }
+
+    /// What was said goes to the end of what is already there.
+    private func insertDictated(_ text: String) {
+        let view = rootView.textView
+        let existing = view.string
+        let needsSpace = !existing.isEmpty && !existing.hasSuffix("\n") && !existing.hasSuffix(" ")
+        view.insertText((needsSpace ? " " : "") + text, replacementRange: NSRange(location: (existing as NSString).length, length: 0))
     }
 
     private var width: CGFloat {
@@ -107,7 +148,9 @@ final class DraftController: NSObject, NSTextViewDelegate {
         self.bounds = bounds
         isClosing = false
 
+        dictation.cancel()
         rootView.paper = preferences.defaultColor
+        rootView.pulseDuration = tuning.reduceMotion ? 0 : tuning.scaled(tuning.dictationPulseDuration)
         rootView.textView.string = ""
         rootView.refresh()
         layoutPanel()
@@ -138,7 +181,7 @@ final class DraftController: NSObject, NSTextViewDelegate {
     }
 
     func submit(asIs: Bool = false) {
-        guard isOpen, !isBusy, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard isOpen, !isBusy, !dictation.isBusy, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         onStick?(text, asIs)
     }
 
@@ -150,6 +193,7 @@ final class DraftController: NSObject, NSTextViewDelegate {
 
     func close(animated: Bool) {
         guard panel.isVisible, !isClosing else { return }
+        dictation.cancel()
         let duration = animated ? tuning.scaled(tuning.draftFromHotkeyDuration) : 0
         // Set first: leaving the screen takes the keyboard away, and that must not
         // be read as the user turning away from an open draft.
@@ -232,6 +276,23 @@ final class DraftView: NSView {
     let stickButton = HandIconButton(icon: .check, label: L10n.draftStick)
     private let microphone = HandIconButton(icon: .microphone, label: L10n.draftDictate)
     private let titleLabel = NSTextField(labelWithString: "")
+    /// The timer while recording, "Listening…" while recognising.
+    private let statusLabel = NSTextField(labelWithString: "")
+    /// What went wrong with the dictation and what to do about it.
+    private let messageLabel = NSTextField(wrappingLabelWithString: "")
+    private let levelBar = CALayer()
+
+    var onMicrophone: (() -> Void)?
+
+    /// What dictation is doing (spec 4.3).
+    var dictation = DictationStatus() {
+        didSet {
+            if dictation != oldValue { applyDictation() }
+        }
+    }
+
+    /// One beat of the microphone's pulse while it records; 0 for no pulse.
+    var pulseDuration: TimeInterval = 0
     private let scrollView = NSScrollView(frame: .zero)
 
     var paper: PaperColor = .default {
@@ -275,12 +336,20 @@ final class DraftView: NSView {
         textView.allowsUndo = true
         textView.placeholder = L10n.draftPlaceholder
 
-        // Voice arrives in stage 3.
-        microphone.isEnabled = false
+        microphone.onClick = { [weak self] in self?.onMicrophone?() }
+        statusLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .medium)
+        statusLabel.lineBreakMode = .byTruncatingTail
+        messageLabel.font = NSFont.systemFont(ofSize: 11)
+        messageLabel.isSelectable = false
+        levelBar.cornerRadius = 1
+        levelBar.isHidden = true
+        layer?.addSublayer(levelBar)
 
         addSubview(titleLabel)
         addSubview(scrollView)
+        addSubview(messageLabel)
         addSubview(microphone)
+        addSubview(statusLabel)
         addSubview(stickButton)
         applyColors()
         refresh()
@@ -307,23 +376,71 @@ final class DraftView: NSView {
         manager.ensureLayout(for: container)
         let textHeight = ceil(manager.usedRect(for: container).height) + textView.textContainerInset.height * 2
         // Room for the placeholder's two lines while the draft is empty.
-        return Self.headerHeight + max(textHeight, 44) + Self.footerHeight
+        return Self.headerHeight + max(textHeight, 44) + messageHeight(fittingWidth: textWidth) + Self.footerHeight
     }
 
     override func layout() {
         super.layout()
         let padding = Self.padding
         titleLabel.frame = NSRect(x: padding, y: 10, width: bounds.width - padding * 2, height: 30)
+        let footerTop = bounds.height - Self.footerHeight
+        let noteHeight = messageHeight(fittingWidth: bounds.width - padding * 2)
         scrollView.frame = NSRect(
             x: padding,
             y: Self.headerHeight,
             width: bounds.width - padding * 2,
-            height: max(bounds.height - Self.headerHeight - Self.footerHeight, 0)
+            height: max(footerTop - noteHeight - Self.headerHeight, 0)
         )
+        messageLabel.frame = NSRect(x: padding, y: footerTop - noteHeight, width: bounds.width - padding * 2, height: noteHeight)
         let iconSize: CGFloat = 24
         let iconY = bounds.height - Self.footerHeight + (Self.footerHeight - iconSize) / 2 - 2
         microphone.frame = NSRect(x: padding - 4, y: iconY, width: iconSize, height: iconSize)
         stickButton.frame = NSRect(x: bounds.width - padding - iconSize + 4, y: iconY, width: iconSize, height: iconSize)
+        let statusX = microphone.frame.maxX + 6
+        statusLabel.frame = NSRect(x: statusX, y: iconY + 3, width: max(stickButton.frame.minX - 6 - statusX, 0), height: 18)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        levelBar.frame = NSRect(x: statusX, y: iconY + 23, width: Self.levelBarWidth * CGFloat(dictation.level), height: 2)
+        CATransaction.commit()
+    }
+
+    private static let levelBarWidth: CGFloat = 44
+
+    private func messageHeight(fittingWidth width: CGFloat) -> CGFloat {
+        guard !messageLabel.stringValue.isEmpty, width > 0 else { return 0 }
+        let size = messageLabel.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: width, height: 400)) ?? .zero
+        return ceil(size.height) + 6
+    }
+
+    private func applyDictation() {
+        let isRecording = dictation.state == .recording
+        switch dictation.state {
+        case .recording: statusLabel.stringValue = DictationClock.label(elapsed: dictation.elapsed)
+        case .recognizing: statusLabel.stringValue = L10n.dictationListening
+        case .idle, .preparing: statusLabel.stringValue = ""
+        }
+        messageLabel.stringValue = dictation.state == .idle ? (dictation.message ?? "") : ""
+        microphone.isEnabled = dictation.state == .idle || isRecording
+        microphone.setAccessibilityLabel(isRecording ? L10n.draftStopDictation : L10n.draftDictate)
+        levelBar.isHidden = !isRecording
+
+        let pulseKey = "recording"
+        if isRecording, pulseDuration > 0 {
+            if microphone.layer?.animation(forKey: pulseKey) == nil {
+                let pulse = CABasicAnimation(keyPath: "opacity")
+                pulse.fromValue = 1
+                pulse.toValue = 0.45
+                pulse.duration = pulseDuration
+                pulse.autoreverses = true
+                pulse.repeatCount = .infinity
+                pulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                microphone.layer?.add(pulse, forKey: pulseKey)
+            }
+        } else {
+            microphone.layer?.removeAnimation(forKey: pulseKey)
+        }
+        applyColors()
+        needsLayout = true
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -337,7 +454,12 @@ final class DraftView: NSView {
         textView.textColor = text
         textView.insertionPointColor = text
         textView.placeholderColor = paper.textColor(alpha: 0.4)
-        microphone.tint = paper.textColor(alpha: 0.75)
+        let isRecording = dictation.state == .recording
+        microphone.tint = isRecording ? .systemRed : paper.textColor(alpha: 0.75)
+        // Spec 7: the timer turns red before the limit.
+        statusLabel.textColor = isRecording && dictation.isEnding ? .systemRed : paper.textColor(alpha: 0.72)
+        messageLabel.textColor = paper.textColor(alpha: 0.62)
+        levelBar.backgroundColor = NSColor.systemRed.cgColor
         stickButton.tint = paper.textColor(alpha: 0.85)
         needsDisplay = true
     }
@@ -357,6 +479,8 @@ final class DraftTextView: NSTextView {
     var onSubmit: (() -> Void)?
     /// ⌘Return: stick the text as it is, without taking it apart.
     var onSubmitAsIs: (() -> Void)?
+    /// Space was pressed; true means it was used up and must not be typed.
+    var onSpace: (() -> Bool)?
     var onCancel: (() -> Void)?
     var placeholder = ""
     var placeholderColor = NSColor.placeholderTextColor
@@ -366,6 +490,7 @@ final class DraftTextView: NSTextView {
         static let returnKey: UInt16 = 36
         static let enter: UInt16 = 76
         static let escape: UInt16 = 53
+        static let space: UInt16 = 49
         static let keyA: UInt16 = 0
         static let keyZ: UInt16 = 6
         static let keyX: UInt16 = 7
@@ -385,6 +510,10 @@ final class DraftTextView: NSTextView {
                 insertText("\n", replacementRange: selectedRange())
             } else {
                 onSubmit?()
+            }
+        case KeyCode.space:
+            if onSpace?() != true {
+                super.keyDown(with: event)
             }
         default:
             super.keyDown(with: event)

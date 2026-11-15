@@ -44,6 +44,7 @@ final class EntryController: NSObject {
         displays: any ScreenGeometry,
         stickers: StickerManager,
         structurer: any Structurer,
+        dictation: Dictation,
         clock: any AppClock
     ) {
         self.structurer = structurer
@@ -52,7 +53,7 @@ final class EntryController: NSObject {
         self.preferences = preferences
         self.displays = displays
         self.stickers = stickers
-        draft = DraftController(tuning: tuning, preferences: preferences)
+        draft = DraftController(tuning: tuning, preferences: preferences, dictation: dictation)
         super.init()
 
         tabPanel.contentView = tabView

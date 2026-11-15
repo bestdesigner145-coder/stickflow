@@ -724,6 +724,39 @@ enum SelfCheck {
             } else {
                 check(false, "a dictated paragraph becomes a sticker (\(stickers.controllers.count - countBeforePlan) new)")
             }
+
+            // 16. Dictation (spec 7): the microphone records, speech becomes text in the draft, Return makes a plan of it.
+            let countBeforeVoice = stickers.controllers.count
+            let voice = entry.draft.dictation
+            entry.toggleDraft()
+            await pause(0.3)
+            voice.toggle()
+            await pause(0.4)
+            check(voice.state == .recording, "pressing the microphone starts a recording (\(voice.state))")
+            check(entry.draft.rootView.dictation.state == .recording && voice.elapsed > 0, "the draft shows the recording and its timer runs (\(voice.elapsed))")
+            snapshotView(entry.draft.rootView, name: "17-draft-recording")
+            NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: entry.draft.rootView.window)
+            await pause(0.2)
+            check(entry.draft.isOpen, "an empty draft stays open while it listens")
+            entry.draft.submit()
+            check(entry.draft.isOpen, "Return does nothing while it listens")
+            voice.toggle()
+            await pause(0.5)
+            check(voice.state == .idle, "pressing it again stops the recording (\(voice.state))")
+            check(entry.draft.text == ScriptedSpeechEngine.sample, "what was said appears in the draft (\(entry.draft.text.prefix(40)))")
+            entry.draft.submit()
+            await pause(1.2)
+            check(
+                stickers.controllers.count == countBeforeVoice + 1 && stickers.controllers.last?.sticker.blocks.count == 6,
+                "and Return makes a plan of it (\(stickers.controllers.last?.sticker.blocks.count ?? -1) lines)"
+            )
+            entry.toggleDraft()
+            await pause(0.3)
+            voice.toggle()
+            await pause(0.3)
+            entry.toggleDraft()
+            await pause(0.3)
+            check(voice.state == .idle && !entry.draft.isOpen, "closing the draft drops the recording (\(voice.state))")
         }
 
         // MARK: Snapshots

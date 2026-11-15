@@ -29,6 +29,14 @@ enum L10n {
     static var draftPlaceholder: String { String(localized: "draft.placeholder") }
     static var draftStick: String { String(localized: "draft.stick") }
     static var draftDictate: String { String(localized: "draft.dictate") }
+    static var draftStopDictation: String { String(localized: "draft.dictate.stop") }
+
+    static var dictationListening: String { String(localized: "dictation.listening") }
+    static var dictationNoMicrophone: String { String(localized: "dictation.error.microphone") }
+    static var dictationNoRecognition: String { String(localized: "dictation.error.recognition") }
+    static var dictationNoOnDeviceModel: String { String(localized: "dictation.error.no_on_device") }
+    static var dictationNothingHeard: String { String(localized: "dictation.error.nothing_heard") }
+    static var dictationFailed: String { String(localized: "dictation.error.failed") }
 
     static var toastPeeledOne: String { String(localized: "toast.peeled_one") }
     static var toastRestore: String { String(localized: "toast.restore") }

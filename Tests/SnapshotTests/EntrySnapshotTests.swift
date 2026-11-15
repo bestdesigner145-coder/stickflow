@@ -48,6 +48,30 @@ final class EntrySnapshotTests: XCTestCase {
         }
     }
 
+    /// The draft while it listens (spec 4.3): recording, the last seconds,
+    /// recognising, and a dictation that failed.
+    func testDraftDictation() {
+        let failure = "Нет доступа к микрофону. Разрешите его: Системные настройки → Конфиденциальность и безопасность → Микрофон."
+        let states: [(String, DictationStatus)] = [
+            ("recording", DictationStatus(state: .recording, elapsed: 7, level: 0.6)),
+            ("ending", DictationStatus(state: .recording, elapsed: 170, level: 0.2, isEnding: true)),
+            ("listening", DictationStatus(state: .recognizing)),
+            ("error", DictationStatus(message: failure)),
+        ]
+        for theme in Self.themes {
+            for (name, status) in states {
+                let draft = DraftView(frame: NSRect(x: 0, y: 0, width: 232, height: 160))
+                draft.appearance = NSAppearance(named: theme.appearance)
+                draft.paper = .default
+                draft.dictation = status
+                draft.refresh()
+                let height = max(draft.height(fittingWidth: 232), 160)
+                draft.frame = NSRect(x: 0, y: 0, width: 232, height: height)
+                assertSnapshot(of: SnapshotRenderer.image(of: draft), as: SnapshotRenderer.strategy, named: "\(theme.name)-\(name)")
+            }
+        }
+    }
+
     func testDraft() {
         for theme in Self.themes {
             for text in ["", "План на день\nДоделать экран кошелька\nСозвон с разработкой в три"] {

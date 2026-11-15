@@ -200,6 +200,17 @@ final class Tuning {
     /// On: a cursor that flew into the zone is ignored until it leaves and comes
     /// back slowly. Off: it may stop in the zone and still call the pad.
     var zoneRejectsFastEntry = false
+
+    // MARK: Dictation (spec 7)
+
+    /// The longest dictation, seconds; the timer turns red this long before the end.
+    var dictationLimit: Double = 180
+    var dictationWarning: Double = 15
+    /// How often the timer and the level meter are refreshed.
+    var dictationTick: Double = 0.05
+    /// One beat of the microphone's pulse while it records.
+    var dictationPulseDuration: Double = 0.6
+
     /// What a draft with text does when the keyboard goes elsewhere or the desktop
     /// changes. Off: it stays on screen. On: it closes and is kept as a draft, the
     /// way Esc does. An empty draft always closes.
