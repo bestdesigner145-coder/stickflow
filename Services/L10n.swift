@@ -30,6 +30,13 @@ enum L10n {
     static var draftStick: String { String(localized: "draft.stick") }
     static var draftDictate: String { String(localized: "draft.dictate") }
     static var draftStopDictation: String { String(localized: "draft.dictate.stop") }
+    static var draftStructuring: String { String(localized: "draft.structuring") }
+    static var draftStop: String { String(localized: "draft.stop") }
+    static var draftFailed: String { String(localized: "draft.failed") }
+    static var draftStickAsIs: String { String(localized: "draft.failed.stick") }
+    static var draftRetry: String { String(localized: "draft.failed.retry") }
+    static var draftModeNew: String { String(localized: "draft.mode.new") }
+    static var draftModeAppend: String { String(localized: "draft.mode.append") }
 
     static var dictationListening: String { String(localized: "dictation.listening") }
     static var dictationNoMicrophone: String { String(localized: "dictation.error.microphone") }

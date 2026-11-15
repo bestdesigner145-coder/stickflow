@@ -15,7 +15,7 @@ final class EntryController: NSObject {
     private let displays: any ScreenGeometry
     private let stickers: StickerManager
     /// Takes dictated or typed text apart into a plan (spec 8).
-    private let structurer: any Structurer
+    var structurer: any Structurer
     private let clock: any AppClock
     private var structuring: Task<Void, Never>?
 
@@ -74,6 +74,16 @@ final class EntryController: NSObject {
         draft.onStick = { [weak self] text, asIs in
             self?.stickDraft(text, asIs: asIs)
         }
+        draft.onStop = { [weak self] in self?.stopStructuring() }
+        draft.onRetry = { [weak self] in
+            guard let self, case let .failed(text) = self.pending else { return }
+            self.startStructuring(text)
+        }
+        draft.onStickAnyway = { [weak self] in
+            guard let self, case let .failed(text) = self.pending else { return }
+            self.commitAsIs(text)
+        }
+        draft.onUndoResult = { [weak self] in self?.undoResult() ?? false }
         draft.onCancel = { [weak self] text in
             self?.cancelDraft(text)
         }
@@ -326,6 +336,9 @@ final class EntryController: NSObject {
         detector.forceOpen()
         show(.open, animated: origin == .pad || phase != .open)
 
+        clearPending()
+        // "Add to sticker" is offered only when there is one (spec 4.3).
+        draft.allowsAppend = stickers.topController != nil
         let window = padWindowFrame(layout)
         let padLeft = layout.edge.side == .right
             ? window.maxX - CGFloat(tuning.padOpenReach)
@@ -340,32 +353,164 @@ final class EntryController: NSObject {
         stickers.pointerNeedsAttention()
     }
 
-    /// Return takes the text apart first; ⌘Return, or text that is a list already,
-    /// is stuck as it is (spec 4.3).
-    private func stickDraft(_ text: String, asIs: Bool) {
-        guard !asIs, !PlainTextPlan.looksStructured(text) else {
-            stick(PlainTextPlan.make(from: text, plainLineKind: tuning.newLineAfterTitleIsTodo ? .todo : .text), rawInput: text)
-            return
+    // MARK: From the draft to a sticker (spec 4.3, 8)
+
+    /// What the draft is waiting for after Return.
+    private enum Pending {
+        case nothing
+        /// A structurer is at work on this text.
+        case structuring(String)
+        /// The result is on show; it is stuck when the preview ends.
+        case preview(text: String, plan: NotePlan)
+        /// The structurer failed on this text; the user is asked what to do.
+        case failed(String)
+
+        var text: String? {
+            switch self {
+            case .nothing: nil
+            case let .structuring(text), let .failed(text), let .preview(text, _): text
+            }
         }
+    }
+
+    private var pending = Pending.nothing
+    private var previewTimer: Timer?
+
+    /// Return takes the text apart first; ⌘Return, or text that is a list already,
+    /// is stuck as it is.
+    private func stickDraft(_ text: String, asIs: Bool) {
+        switch pending {
+        case let .preview(original, plan):
+            // Return or the tick while the result is shown: no more waiting.
+            commit(plan, text: original)
+        case .structuring, .failed:
+            break
+        case .nothing:
+            if asIs || PlainTextPlan.looksStructured(text) {
+                commitAsIs(text)
+            } else {
+                startStructuring(text)
+            }
+        }
+    }
+
+    private func startStructuring(_ text: String) {
         var draftRequest = StructureRequest(text: text, locale: .current, now: clock.now)
         draftRequest.ambiguousHoursAreAfternoon = tuning.rulesAssumeAfternoon
         let request = draftRequest
         let structurer = self.structurer
-        draft.isBusy = true
+        let limit = structurer.isLocal ? tuning.structureTimeoutLocal : tuning.structureTimeoutCloud
+        pending = .structuring(text)
+        draft.showStructuring()
         structuring?.cancel()
         structuring = Task { [weak self] in
-            let plan = try? await structurer.structure(request)
-            guard let self, !Task.isCancelled else { return }
-            self.draft.isBusy = false
-            guard self.draft.isOpen, self.draft.text == text else { return }
-            if let plan = plan?.normalized(), !plan.isEmpty {
-                self.stick(PlainTextPlan.Result(title: plan.title, blocks: plan.blocks()), rawInput: text)
-            } else {
-                // Nothing came of it: the text is stuck as it was typed.
-                let fallback = PlainTextPlan.make(from: text, plainLineKind: self.tuning.newLineAfterTitleIsTodo ? .todo : .text)
-                self.stick(fallback, rawInput: text)
+            let outcome = await Self.run(structurer, request, limit: limit)
+            guard let self, !Task.isCancelled, self.draft.isOpen, case .structuring = self.pending else { return }
+            switch outcome {
+            case let .success(plan) where !plan.isEmpty:
+                self.showResult(plan, text: text)
+            case .success:
+                // There was nothing to take apart: the text is stuck as it was written.
+                self.commitAsIs(text)
+            case let .failure(error) where (error as? StructurerError) == .nothingToDo:
+                self.commitAsIs(text)
+            case .failure:
+                self.pending = .failed(text)
+                self.draft.showFailure()
             }
         }
+    }
+
+    /// The structurer's answer, or a failure once `limit` seconds have passed (spec 8.1).
+    private nonisolated static func run(
+        _ structurer: any Structurer,
+        _ request: StructureRequest,
+        limit: TimeInterval
+    ) async -> Result<NotePlan, any Error> {
+        await withTaskGroup(of: Result<NotePlan, any Error>.self) { group in
+            group.addTask {
+                do {
+                    return try await .success(structurer.structure(request).normalized())
+                } catch {
+                    return .failure(error)
+                }
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: UInt64(max(limit, 0) * 1_000_000_000))
+                return .failure(StructurerError.timedOut)
+            }
+            let first = await group.next() ?? .failure(StructurerError.timedOut)
+            group.cancelAll()
+            return first
+        }
+    }
+
+    /// Shows the result in the draft, then sticks it (spec 4.3, "Готово").
+    private func showResult(_ plan: NotePlan, text: String) {
+        let delay = tuning.scaled(tuning.structuredPreviewDuration)
+        guard delay > 0 else {
+            commit(plan, text: text)
+            return
+        }
+        pending = .preview(text: text, plan: plan)
+        draft.showResult(plan.previewLines(includingTitle: !draft.isAppending))
+        previewTimer?.invalidate()
+        previewTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, case let .preview(text, plan) = self.pending else { return }
+                self.commit(plan, text: text)
+            }
+        }
+    }
+
+    private func clearPending() {
+        structuring?.cancel()
+        structuring = nil
+        previewTimer?.invalidate()
+        previewTimer = nil
+        pending = .nothing
+    }
+
+    /// "Stop" while the text is being taken apart: back to writing, the text is as it was.
+    private func stopStructuring() {
+        guard case .structuring = pending else { return }
+        clearPending()
+        draft.showWriting()
+    }
+
+    /// ⌘Z while the result is shown: the original text comes back.
+    private func undoResult() -> Bool {
+        guard case let .preview(text, _) = pending else { return false }
+        clearPending()
+        draft.showWriting(restoring: text)
+        return true
+    }
+
+    private func commit(_ plan: NotePlan, text: String) {
+        let isAppending = draft.isAppending
+        clearPending()
+        if isAppending, let target = stickers.topController {
+            draft.close(animated: true)
+            stickers.append(plan, to: target)
+            stickers.pointerNeedsAttention()
+        } else {
+            stick(PlainTextPlan.Result(title: plan.title, blocks: plan.blocks()), rawInput: text)
+        }
+    }
+
+    /// Sticks the text line by line, without a structurer.
+    private func commitAsIs(_ text: String) {
+        let lines = PlainTextPlan.make(from: text, plainLineKind: tuning.newLineAfterTitleIsTodo ? .todo : .text)
+        guard draft.isAppending, stickers.topController != nil else {
+            clearPending()
+            stick(lines, rawInput: text)
+            return
+        }
+        // Added to a sticker, every line is an item of its own.
+        let items = ([lines.title] + lines.blocks.map(\.text))
+            .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+            .map { NotePlan.Item(text: $0) }
+        commit(NotePlan(title: "", sections: [NotePlan.Section(items: items)]), text: text)
     }
 
     private func stick(_ plan: PlainTextPlan.Result, rawInput text: String) {
@@ -375,10 +520,10 @@ final class EntryController: NSObject {
         stickers.pointerNeedsAttention()
     }
 
-    private func cancelDraft(_ text: String) {
-        structuring?.cancel()
-        structuring = nil
-        draft.isBusy = false
+    private func cancelDraft(_ shown: String) {
+        // While a result is on show the draft holds the result, not what was written.
+        let text = pending.text ?? shown
+        clearPending()
         let plan = PlainTextPlan.make(from: text, plainLineKind: tuning.newLineAfterTitleIsTodo ? .todo : .text)
         draft.close(animated: true)
         stickers.keepDraft(plan, rawInput: text)

@@ -4,6 +4,7 @@
 #if DEBUG
 // The self-check is one long scripted scenario with wordy check labels;
 // the size and length limits are for product code.
+// swiftlint:disable file_length
 // swiftlint:disable function_body_length cyclomatic_complexity large_tuple line_length type_body_length
 import AppKit
 import StickflowCore
@@ -706,6 +707,9 @@ enum SelfCheck {
             tuning.forcedReduceMotion = nil
 
             // 15. Return takes a dictated paragraph apart with the rules (spec 8).
+            // Without the pause on the result; that pause has a step of its own below.
+            let previewDuration = tuning.structuredPreviewDuration
+            tuning.structuredPreviewDuration = 0
             let countBeforePlan = stickers.controllers.count
             let dictated = "Короче, сначала надо доделать экран кошелька, там типа пустые состояния и ошибки, "
                 + "потом созвон с разработкой в три, и если успею, условно, пост в телегу написать"
@@ -761,6 +765,82 @@ enum SelfCheck {
             entry.toggleDraft()
             await pause(0.3)
             check(voice.state == .idle && !entry.draft.isOpen, "closing the draft drops the recording (\(voice.state))")
+
+            // 17. A structurer that takes its time (spec 4.3): "Sorting…" with Stop,
+            // a failure with two answers, the result on show and ⌘Z.
+            let draft = entry.draft
+            let rules = entry.structurer
+            let phrase = "Сначала забрать посылку, потом оплатить интернет"
+            func write(_ text: String) {
+                draft.rootView.textView.insertText(text, replacementRange: draft.rootView.textView.selectedRange())
+            }
+            tuning.structuredPreviewDuration = previewDuration
+            var countBefore = stickers.controllers.count
+
+            entry.structurer = SlowStructurer(delay: 0.5, fails: true)
+            entry.toggleDraft()
+            await pause(0.3)
+            write(phrase)
+            draft.submit()
+            await pause(0.2)
+            check(draft.phase == .structuring, "a slow structurer shows «Sorting…» (\(draft.phase))")
+            snapshotView(draft.rootView, name: "18-draft-structuring")
+            await pause(0.7)
+            check(draft.phase == .failed && draft.isOpen, "when it fails the draft asks what to do (\(draft.phase))")
+            snapshotView(draft.rootView, name: "18b-draft-failed")
+            draft.rootView.stickAnywayButton.onClick?()
+            await pause(1.0)
+            check(
+                stickers.controllers.count == countBefore + 1 && stickers.controllers.last?.sticker.title == phrase,
+                "«Stick» sticks the text as it was written (\(stickers.controllers.last?.sticker.title ?? "-"))"
+            )
+
+            entry.structurer = SlowStructurer(delay: 5, fails: false)
+            entry.toggleDraft()
+            await pause(0.3)
+            write(phrase)
+            draft.submit()
+            await pause(0.2)
+            check(draft.phase == .structuring, "the structurer is at work")
+            draft.rootView.stickButton.onClick?()
+            check(draft.phase == .writing && draft.text == phrase, "«Stop» gives the text back for writing (\(draft.phase))")
+
+            entry.structurer = rules
+            countBefore = stickers.controllers.count
+            draft.submit()
+            await pause(0.3)
+            check(draft.phase == .result && stickers.controllers.count == countBefore, "the result is shown before it is stuck (\(draft.phase))")
+            check(draft.text.contains("☐ Забрать посылку"), "and it is the plan, not the text (\(draft.text.prefix(60)))")
+            snapshotView(draft.rootView, name: "18c-draft-result")
+            let undone = draft.rootView.textView.onUndo?() ?? false
+            check(undone && draft.phase == .writing && draft.text == phrase, "⌘Z brings the original text back (\(draft.text.prefix(40)))")
+            draft.submit()
+            await pause(0.3)
+            draft.submit()
+            await pause(1.0)
+            let planned = stickers.controllers.last
+            check(
+                stickers.controllers.count == countBefore + 1 && planned?.sticker.blocks.map(\.text) == ["Забрать посылку", "Оплатить интернет"],
+                "Return on the result sticks it at once (\(planned?.sticker.blocks.map(\.text) ?? []))"
+            )
+
+            // 18. "Add to sticker" (spec 4.3, 8.3): the lines go into the top sticker.
+            countBefore = stickers.controllers.count
+            entry.toggleDraft()
+            await pause(0.3)
+            check(draft.allowsAppend && !draft.rootView.modeToggle.isHidden, "with a sticker on screen the draft offers «Add to sticker»")
+            draft.rootView.modeToggle.isAppend = true
+            write("Купить молоко, потом оплатить интернет")
+            snapshotView(draft.rootView, name: "19-draft-append")
+            draft.submit()
+            await pause(previewDuration + 0.8)
+            let grown = stickers.controllers.last
+            check(stickers.controllers.count == countBefore && !draft.isOpen, "no new sticker appears")
+            check(
+                grown?.sticker.blocks.map(\.text) == ["Забрать посылку", "Оплатить интернет", "Купить молоко"],
+                "the top sticker gets the new line and nothing twice (\(grown?.sticker.blocks.map(\.text) ?? []))"
+            )
+            if let grown { snapshot(grown, name: "19b-appended") }
         }
 
         // MARK: Snapshots
@@ -826,5 +906,23 @@ enum SelfCheck {
         }
     }
 }
+
+/// A structurer that answers late, or fails late: for the draft's waiting states.
+private struct SlowStructurer: Structurer {
+    let id = "slow"
+    let displayName = "Slow"
+    let isLocal = true
+    let delay: TimeInterval
+    let fails: Bool
+
+    func health() async -> StructurerHealth { .ready }
+
+    func structure(_ request: StructureRequest) async throws -> NotePlan {
+        try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+        if fails { throw StructurerError.invalidAnswer }
+        return RuleStructurer.plan(from: request.text)
+    }
+}
+
 // swiftlint:enable function_body_length cyclomatic_complexity large_tuple line_length type_body_length
 #endif

@@ -72,6 +72,28 @@ final class EntrySnapshotTests: XCTestCase {
         }
     }
 
+    /// The draft after Return (spec 4.3): at work, failed, and showing the result;
+    /// with the "New / Add to sticker" toggle.
+    func testDraftPhases() {
+        for theme in Self.themes {
+            for phase in ["structuring", "failed", "result"] {
+                let draft = DraftView(frame: NSRect(x: 0, y: 0, width: 232, height: 160))
+                draft.appearance = NSAppearance(named: theme.appearance)
+                draft.paper = .default
+                draft.showsModeToggle = true
+                draft.textView.string = "Сначала забрать посылку, потом оплатить интернет"
+                switch phase {
+                case "structuring": draft.setPhase(.structuring)
+                case "failed": draft.setPhase(.failed)
+                default: draft.showResult(lines: ["План на сегодня", "☐ Забрать посылку", "☐ Оплатить интернет"])
+                }
+                let height = max(draft.height(fittingWidth: 232), 160)
+                draft.frame = NSRect(x: 0, y: 0, width: 232, height: height)
+                assertSnapshot(of: SnapshotRenderer.image(of: draft), as: SnapshotRenderer.strategy, named: "\(theme.name)-\(phase)")
+            }
+        }
+    }
+
     func testDraft() {
         for theme in Self.themes {
             for text in ["", "План на день\nДоделать экран кошелька\nСозвон с разработкой в три"] {

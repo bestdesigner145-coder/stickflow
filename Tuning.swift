@@ -206,6 +206,16 @@ final class Tuning {
     /// an hour stays in the text as it was said.
     var rulesAssumeAfternoon = false
 
+    // MARK: Structuring (spec 8, 4.3)
+
+    /// How long the draft shows the result, highlighted, before it is stuck.
+    var structuredPreviewDuration: Double = 1.2
+    /// A structurer that takes longer has failed (spec 8.1).
+    var structureTimeoutLocal: Double = 20
+    var structureTimeoutCloud: Double = 15
+    /// One turn of the "Sorting…" spinner (spec 6.7).
+    var spinnerPeriod: Double = 0.8
+
     // MARK: Dictation (spec 7)
 
     /// The longest dictation, seconds; the timer turns red this long before the end.

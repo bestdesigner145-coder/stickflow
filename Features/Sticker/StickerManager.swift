@@ -186,6 +186,27 @@ final class StickerManager: NSObject {
         return controller
     }
 
+    /// The sticker "add to sticker" writes into: the one stuck last.
+    var topController: StickerController? {
+        controllers.last { !$0.isClosed }
+    }
+
+    /// Adds a plan's lines to a sticker that is already there (spec 8.3).
+    /// - Returns: false when the sticker already said all of it.
+    @discardableResult
+    func append(_ plan: NotePlan, to controller: StickerController) -> Bool {
+        let merged = PlanAppender.append(plan, to: controller.sticker.blocks)
+        guard !merged.added.isEmpty else { return false }
+        showAll()
+        // Through the editor, as if the lines had been typed: the sticker's model,
+        // its counter and its size follow the usual way.
+        let editor = controller.rootView.textView
+        editor.load(EditorDocument(title: controller.sticker.title, blocks: merged.blocks))
+        controller.blockTextViewDidChangeContent(editor)
+        persist(controller)
+        return true
+    }
+
     /// Keeps a draft that was closed without sticking (spec 4.3: Esc saves it to history).
     func keepDraft(_ plan: PlainTextPlan.Result, rawInput: String) {
         guard !plan.isEmpty else { return }

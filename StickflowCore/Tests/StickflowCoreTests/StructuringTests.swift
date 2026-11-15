@@ -209,6 +209,52 @@ final class StructuringTests: XCTestCase {
         XCTAssertEqual(blocks.map(\.indent), [0, 0, 0, 1, 0])
     }
 
+    func testAddingToAStickerPutsItemsWhereTheyBelong() {
+        let sticker = [
+            Block(kind: .todo, text: "Проверить почту"),
+            Block(kind: .heading2, text: "Кошелёк"),
+            Block(kind: .todo, text: "Доделать экран"),
+            Block(kind: .bullet, text: "ошибки", indent: 1),
+            Block(kind: .heading2, text: "Если успею"),
+            Block(kind: .todo, text: "Написать пост"),
+        ]
+        let plan = NotePlan(title: "Не важно", sections: [
+            NotePlan.Section(items: [NotePlan.Item(text: "Позвонить маме"), NotePlan.Item(text: "проверить ПОЧТУ")]),
+            NotePlan.Section(heading: "кошелёк", items: [NotePlan.Item(text: "Отдать в разработку", time: "15:00", children: ["макеты"])]),
+            NotePlan.Section(heading: "Дом", items: [NotePlan.Item(text: "Помыть окна", task: false)]),
+            NotePlan.Section(heading: "Если успею", items: [NotePlan.Item(text: "Написать пост")]),
+        ])
+        let result = PlanAppender.append(plan, to: sticker)
+        XCTAssertEqual(result.blocks.map(\.text), [
+            "Проверить почту", "Позвонить маме",
+            "Кошелёк", "Доделать экран", "ошибки", "Отдать в разработку — 15:00", "макеты",
+            "Если успею", "Написать пост",
+            "Дом", "Помыть окна",
+        ])
+        XCTAssertEqual(result.added, [1, 5, 6, 9, 10])
+        XCTAssertEqual(result.blocks[6].indent, 1)
+        XCTAssertEqual(result.blocks[9].kind, .heading2)
+        XCTAssertEqual(result.blocks[10].kind, .bullet)
+        XCTAssertEqual(Array(result.blocks.prefix(1)), Array(sticker.prefix(1)), "what was there is untouched")
+
+        // Nothing new: nothing changes. An empty sticker simply takes the plan.
+        let again = PlanAppender.append(plan, to: result.blocks)
+        XCTAssertEqual(again.blocks, result.blocks)
+        XCTAssertTrue(again.added.isEmpty)
+        let fresh = PlanAppender.append(NotePlan(title: "", sections: [NotePlan.Section(items: [NotePlan.Item(text: "Одно")])]), to: [])
+        XCTAssertEqual(fresh.blocks.map(\.text), ["Одно"])
+        XCTAssertEqual(fresh.added, [0])
+    }
+
+    func testPlanAsPreviewLines() {
+        let plan = NotePlan(title: "План", sections: [
+            NotePlan.Section(items: [NotePlan.Item(text: "Созвониться", time: "11:00", children: ["с Петей"])]),
+            NotePlan.Section(heading: "Дом", items: [NotePlan.Item(text: "Заметка", task: false)]),
+        ])
+        XCTAssertEqual(plan.previewLines(), ["План", "☐ Созвониться — 11:00", "    • с Петей", "ДОМ", "• Заметка"])
+        XCTAssertEqual(plan.previewLines(includingTitle: false).first, "☐ Созвониться — 11:00")
+    }
+
     func testPlanReadsAModelsJSON() throws {
         let json = """
         {"title":"План на день","sections":[

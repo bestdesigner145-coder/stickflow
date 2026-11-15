@@ -43,7 +43,17 @@ final class DraftController: NSObject, NSTextViewDelegate {
         rootView.textView.onSubmit = { [weak self] in self?.submit() }
         rootView.textView.onSubmitAsIs = { [weak self] in self?.submit(asIs: true) }
         rootView.textView.onCancel = { [weak self] in self?.cancel() }
-        rootView.stickButton.onClick = { [weak self] in self?.submit() }
+        rootView.stickButton.onClick = { [weak self] in
+            guard let self else { return }
+            if self.rootView.phase == .structuring {
+                self.onStop?()
+            } else {
+                self.submit()
+            }
+        }
+        rootView.retryButton.onClick = { [weak self] in self?.onRetry?() }
+        rootView.stickAnywayButton.onClick = { [weak self] in self?.onStickAnyway?() }
+        rootView.textView.onUndo = { [weak self] in self?.onUndoResult?() ?? false }
         rootView.onMicrophone = { [weak self] in self?.dictation.toggle() }
         rootView.textView.onSpace = { [weak self] in
             // Space stops a recording instead of typing a space (spec 4.3).
@@ -150,6 +160,9 @@ final class DraftController: NSObject, NSTextViewDelegate {
         isClosing = false
 
         dictation.cancel()
+        rootView.setPhase(.writing)
+        rootView.modeToggle.isAppend = false
+        rootView.showsModeToggle = allowsAppend
         rootView.paper = preferences.defaultColor
         rootView.pulseDuration = tuning.reduceMotion ? 0 : tuning.scaled(tuning.dictationPulseDuration)
         rootView.textView.string = ""
@@ -176,14 +189,52 @@ final class DraftController: NSObject, NSTextViewDelegate {
     }
 
     /// Return, ⌘Return or the tick. Does nothing while the draft is empty.
-    /// While on, the draft is being taken apart: it accepts no second Return.
-    var isBusy = false {
-        didSet { rootView.stickButton.isEnabled = !isBusy && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-    }
+    /// "Stop" while the text is being taken apart.
+    var onStop: (() -> Void)?
+    /// "Try again" and "Stick" after a structurer failed.
+    var onRetry: (() -> Void)?
+    var onStickAnyway: (() -> Void)?
+    /// ⌘Z while the result is shown; true means the original text came back.
+    var onUndoResult: (() -> Bool)?
+
+    /// Whether there is a sticker to add to; decides if the mode toggle is shown.
+    var allowsAppend = false
+
+    /// True when the lines are to go into the top sticker (spec 4.3, "Дописать").
+    var isAppending: Bool { allowsAppend && rootView.modeToggle.isAppend }
+
+    var phase: DraftView.Phase { rootView.phase }
 
     func submit(asIs: Bool = false) {
-        guard isOpen, !isBusy, !dictation.isBusy, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard isOpen, phase == .writing || phase == .result, !dictation.isBusy else { return }
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         onStick?(text, asIs)
+    }
+
+    /// The text is being taken apart: it dims, "Sorting…" and "Stop" appear.
+    func showStructuring() {
+        rootView.spinnerPeriod = tuning.reduceMotion ? 0 : tuning.scaled(tuning.spinnerPeriod)
+        rootView.setPhase(.structuring)
+        layoutPanel()
+    }
+
+    /// The structurer failed: "Stick as it is?" with two answers.
+    func showFailure() {
+        rootView.setPhase(.failed)
+        layoutPanel()
+    }
+
+    /// The result, highlighted, in place of the text (spec 4.3, "Готово").
+    func showResult(_ lines: [String]) {
+        rootView.showResult(lines: lines)
+        layoutPanel()
+    }
+
+    /// Back to writing; `text` puts the original text back after a result.
+    func showWriting(restoring text: String? = nil) {
+        rootView.setPhase(.writing, restoring: text)
+        layoutPanel()
+        if isOpen { panel.makeFirstResponder(rootView.textView) }
     }
 
     /// Esc, or the hotkey pressed again.
@@ -285,6 +336,70 @@ final class DraftView: NSView {
 
     var onMicrophone: (() -> Void)?
 
+    /// What the draft is doing with the text after Return (spec 4.3).
+    enum Phase: Equatable {
+        case writing
+        /// A structurer is at work.
+        case structuring
+        /// The structurer failed and the user is asked what to do.
+        case failed
+        /// The result is shown before it is stuck.
+        case result
+    }
+
+    private(set) var phase = Phase.writing
+    let modeToggle = ModeToggleView(frame: .zero)
+    let retryButton = PaperTextButton(title: L10n.draftRetry)
+    let stickAnywayButton = PaperTextButton(title: L10n.draftStickAsIs)
+    private let spinner = SpinnerView(frame: .zero)
+
+    var showsModeToggle = false {
+        didSet {
+            modeToggle.isHidden = !showsModeToggle
+            needsLayout = true
+        }
+    }
+
+    /// Seconds per turn of the spinner; 0 leaves it standing.
+    var spinnerPeriod: TimeInterval = 0
+
+    func setPhase(_ new: Phase, restoring text: String? = nil) {
+        phase = new
+        if let text {
+            textView.string = text
+            // The marker of a result must not stay on the text that came back.
+            let whole = NSRange(location: 0, length: (text as NSString).length)
+            textView.textStorage?.removeAttribute(.backgroundColor, range: whole)
+            textView.typingAttributes[.backgroundColor] = nil
+        }
+        applyPhase()
+    }
+
+    /// Shows the plan's lines in place of the text, highlighted like with a marker.
+    func showResult(lines: [String]) {
+        phase = .result
+        textView.string = lines.joined(separator: "\n")
+        let whole = NSRange(location: 0, length: (textView.string as NSString).length)
+        textView.textStorage?.addAttribute(.backgroundColor, value: NSColor.systemOrange.withAlphaComponent(0.28), range: whole)
+        applyPhase()
+    }
+
+    private func applyPhase() {
+        let isWriting = phase == .writing
+        textView.isEditable = isWriting
+        textView.alphaValue = phase == .structuring ? 0.45 : 1
+        microphone.isHidden = !isWriting
+        stickButton.isHidden = phase == .failed
+        stickButton.icon = phase == .structuring ? .stop : .check
+        stickButton.setAccessibilityLabel(phase == .structuring ? L10n.draftStop : L10n.draftStick)
+        retryButton.isHidden = phase != .failed
+        stickAnywayButton.isHidden = phase != .failed
+        spinner.isHidden = phase != .structuring
+        spinner.setSpinning(phase == .structuring, period: spinnerPeriod)
+        refresh()
+        applyDictation()
+    }
+
     /// What dictation is doing (spec 4.3).
     var dictation = DictationStatus() {
         didSet {
@@ -346,11 +461,20 @@ final class DraftView: NSView {
         levelBar.isHidden = true
         layer?.addSublayer(levelBar)
 
+        modeToggle.isHidden = true
+        retryButton.isHidden = true
+        stickAnywayButton.isHidden = true
+        spinner.isHidden = true
+
         addSubview(titleLabel)
+        addSubview(modeToggle)
         addSubview(scrollView)
         addSubview(messageLabel)
         addSubview(microphone)
+        addSubview(spinner)
         addSubview(statusLabel)
+        addSubview(retryButton)
+        addSubview(stickAnywayButton)
         addSubview(stickButton)
         applyColors()
         refresh()
@@ -363,7 +487,8 @@ final class DraftView: NSView {
 
     /// The tick is live only when there is something to stick.
     func refresh() {
-        stickButton.isEnabled = !textView.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        // "Stop" is always there to press; the tick needs something to stick.
+        stickButton.isEnabled = phase == .structuring || !textView.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         textView.needsDisplay = true
     }
 
@@ -383,7 +508,10 @@ final class DraftView: NSView {
     override func layout() {
         super.layout()
         let padding = Self.padding
-        titleLabel.frame = NSRect(x: padding, y: 10, width: bounds.width - padding * 2, height: 30)
+        let toggleSize = showsModeToggle ? modeToggle.fittingSize : .zero
+        modeToggle.frame = NSRect(x: bounds.width - padding - toggleSize.width, y: 18, width: toggleSize.width, height: toggleSize.height)
+        let titleWidth = bounds.width - padding * 2 - (showsModeToggle ? toggleSize.width + 8 : 0)
+        titleLabel.frame = NSRect(x: padding, y: 10, width: max(titleWidth, 0), height: 30)
         let footerTop = bounds.height - Self.footerHeight
         let noteHeight = messageHeight(fittingWidth: bounds.width - padding * 2)
         scrollView.frame = NSRect(
@@ -397,6 +525,16 @@ final class DraftView: NSView {
         let iconY = bounds.height - Self.footerHeight + (Self.footerHeight - iconSize) / 2 - 2
         microphone.frame = NSRect(x: padding - 4, y: iconY, width: iconSize, height: iconSize)
         stickButton.frame = NSRect(x: bounds.width - padding - iconSize + 4, y: iconY, width: iconSize, height: iconSize)
+        spinner.frame = NSRect(x: padding, y: iconY + 5, width: 14, height: 14)
+        let retrySize = retryButton.fittingSize
+        retryButton.frame = NSRect(x: padding, y: iconY + 3, width: retrySize.width, height: retrySize.height)
+        let anywaySize = stickAnywayButton.fittingSize
+        stickAnywayButton.frame = NSRect(
+            x: bounds.width - padding - anywaySize.width,
+            y: iconY + 3,
+            width: anywaySize.width,
+            height: anywaySize.height
+        )
         let statusX = microphone.frame.maxX + 6
         statusLabel.frame = NSRect(x: statusX, y: iconY + 3, width: max(stickButton.frame.minX - 6 - statusX, 0), height: 18)
         CATransaction.begin()
@@ -415,13 +553,18 @@ final class DraftView: NSView {
 
     private func applyDictation() {
         let isRecording = dictation.state == .recording
-        switch dictation.state {
-        case .recording: statusLabel.stringValue = DictationClock.label(elapsed: dictation.elapsed)
-        case .recognizing: statusLabel.stringValue = L10n.dictationListening
-        case .idle, .preparing: statusLabel.stringValue = ""
+        switch (phase, dictation.state) {
+        case (.structuring, _): statusLabel.stringValue = L10n.draftStructuring
+        case (_, .recording): statusLabel.stringValue = DictationClock.label(elapsed: dictation.elapsed)
+        case (_, .recognizing): statusLabel.stringValue = L10n.dictationListening
+        default: statusLabel.stringValue = ""
         }
-        // A failure is shown once the dictation is over; a download, all the time.
-        messageLabel.stringValue = (dictation.state == .idle ? dictation.message : nil) ?? dictation.notice ?? ""
+        if phase == .failed {
+            messageLabel.stringValue = L10n.draftFailed
+        } else {
+            // A failure is shown once the dictation is over; a download, all the time.
+            messageLabel.stringValue = (dictation.state == .idle ? dictation.message : nil) ?? dictation.notice ?? ""
+        }
         microphone.isEnabled = dictation.state == .idle || isRecording
         microphone.setAccessibilityLabel(isRecording ? L10n.draftStopDictation : L10n.draftDictate)
         levelBar.isHidden = !isRecording
@@ -461,6 +604,10 @@ final class DraftView: NSView {
         // Spec 7: the timer turns red before the limit.
         statusLabel.textColor = isRecording && dictation.isEnding ? .systemRed : paper.textColor(alpha: 0.72)
         messageLabel.textColor = paper.textColor(alpha: 0.62)
+        modeToggle.tint = paper.textColor()
+        retryButton.tint = paper.textColor(alpha: 0.7)
+        stickAnywayButton.tint = paper.textColor(alpha: 0.9)
+        spinner.tint = paper.textColor(alpha: 0.72)
         levelBar.backgroundColor = NSColor.systemRed.cgColor
         stickButton.tint = paper.textColor(alpha: 0.85)
         needsDisplay = true
@@ -483,6 +630,8 @@ final class DraftTextView: NSTextView {
     var onSubmitAsIs: (() -> Void)?
     /// Space was pressed; true means it was used up and must not be typed.
     var onSpace: (() -> Bool)?
+    /// ⌘Z; true means the owner undid something of its own.
+    var onUndo: (() -> Bool)?
     var onCancel: (() -> Void)?
     var placeholder = ""
     var placeholderColor = NSColor.placeholderTextColor
@@ -534,7 +683,8 @@ final class DraftTextView: NSTextView {
             case KeyCode.keyC: copy(nil)
             case KeyCode.keyX: cut(nil)
             case KeyCode.keyV: pasteAsPlainText(nil)
-            case KeyCode.keyZ: undoManager?.undo()
+            case KeyCode.keyZ:
+                if onUndo?() != true { undoManager?.undo() }
             case KeyCode.returnKey, KeyCode.enter: onSubmitAsIs?()
             default: return super.performKeyEquivalent(with: event)
             }
@@ -565,6 +715,7 @@ final class HandIconButton: NSView {
     enum Icon {
         case microphone
         case check
+        case stop
     }
 
     var onClick: (() -> Void)?
@@ -580,7 +731,9 @@ final class HandIconButton: NSView {
         didSet { needsDisplay = true }
     }
 
-    private let icon: Icon
+    var icon: Icon {
+        didSet { needsDisplay = true }
+    }
 
     init(icon: Icon, label: String) {
         self.icon = icon
@@ -636,6 +789,13 @@ final class HandIconButton: NSView {
             path.line(to: point(12.1, 4.6))
             path.move(to: point(8.9, 4.4))
             path.line(to: point(15.3, 4.6))
+        case .stop:
+            // A square, not quite square.
+            path.move(to: point(7.3, 7.5))
+            path.line(to: point(16.8, 7.2))
+            path.line(to: point(17.0, 16.7))
+            path.line(to: point(7.1, 16.9))
+            path.close()
         }
         path.lineWidth = 1.5
         path.lineCapStyle = .round
