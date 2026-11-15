@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 Stickflow contributors
 
+import AppKit
 import Foundation
 import Observation
 import QuartzCore
+import StickflowCore
 
 /// Every tunable number of the app lives here (spec rule 0.2).
 ///
@@ -40,10 +42,15 @@ final class Tuning {
 
     var restTextOpacity: Double = 0.92
     var doneTextOpacity: Double = 0.45
-    var fadeDelay: Double = 0.120
     var fadedOpacity: Double = 0.2
-    var fadeOutDuration: Double = 0.150
-    var fadeInDuration: Double = 0.200
+    /// The cursor's halo: every sticker within this distance of the cursor fades,
+    /// fully within `haloCore`, less and less towards the rim.
+    var haloRadius: Double = 140
+    var haloCore: Double = 40
+    // The fade starts the moment the cursor is over the sticker: no pause before
+    // an animation, either at once or smoothly (spec 4.7, 6.7).
+    var fadeOutDuration: Double = 0.180
+    var fadeInDuration: Double = 0.220
 
     // MARK: Edit mode (4.6) and editing (4.8)
 
@@ -74,6 +81,75 @@ final class Tuning {
     var toastInDuration: Double = 0.200
     var toastOutDuration: Double = 0.150
     var toastShift: Double = 8
+
+    // MARK: Call zone and pad (4.1, 4.2)
+
+    /// How deep the zone reaches into the screen: a free edge, and one shared with a display or the Dock.
+    var zoneDepthFree: Double = 4
+    var zoneDepthStrict: Double = 10
+    /// The zone's extent as fractions of the visible height, from the top.
+    var zoneTop: Double = 0.35
+    var zoneBottom: Double = 0.65
+    var zoneMaxSpeedFree: Double = 600
+    var zoneMaxSpeedStrict: Double = 150
+    var zonePeekDelayFree: Double = 0.25
+    var zonePeekDelayStrict: Double = 0.45
+    var zoneOpenDelayFree: Double = 0.15
+    var zoneOpenDelayStrict: Double = 0.20
+    var zoneLeaveDelay: Double = 0.30
+    var tabWidth: Double = 4
+    var tabHeight: Double = 56
+    var tabOpacity: Double = 0.35
+    var padSize: Double = 112
+    /// The label on the pad; it shrinks down to the minimum until its longest word fits.
+    var padLabelFontSize: Double = 20
+    var padLabelMinFontSize: Double = 13
+    var padPeekReach: Double = 28
+    var padOpenReach: Double = 96
+    var padPeekRotation: Double = -6
+    var padPeekDuration: Double = 0.18
+    var padOpenDuration: Double = 0.22
+    var padHideDuration: Double = 0.16
+
+    // MARK: Draft (4.3)
+
+    var draftMinHeight: Double = 160
+    var draftMaxHeight: Double = 360
+    var draftGap: Double = 12
+    var draftFromPadDuration: Double = 0.22
+    var draftFromHotkeyDuration: Double = 0.12
+    var draftFromPadStartScale: Double = 0.96
+    var draftFromHotkeyStartScale: Double = 0.98
+
+    // MARK: Sticking (4.4) and peeling by the corner (4.10)
+
+    /// Spec 6.7: 280 ms, easeOut: a quick start and a soft landing.
+    var flightDuration: Double = 0.28
+    /// A sticker that flies or is peeled is a picture in the effects overlay. For
+    /// this long the picture and the sticker's own window overlap when one takes
+    /// over from the other, so that there is never a frame with neither.
+    var spriteHandoverDuration: Double = 0.06
+    /// How far the middle of the flight rises above the straight line.
+    var flightLift: Double = 60
+    var flightScale: Double = 1.03
+    /// How long the sticker takes to grow to that scale as it lifts off.
+    var flightLiftOffDuration: Double = 0.1
+    var impactDuration: Double = 0.22
+    /// The squash at the moment of impact: 1.03 → this → 1.
+    var impactSquash: Double = 0.985
+    var airRingDuration: Double = 0.26
+    var airRingReach: Double = 10
+    var airRingOpacity: Double = 0.25
+    /// The square at the bottom right the sticker is peeled by.
+    var peelCornerSize: Double = 28
+    /// How far the corner is folded when the edit key is held, as a hint.
+    var peelCornerHint: Double = 9
+    var peelDistance: Double = 70
+    var peelSpeed: Double = 800
+    var peelGestureDuration: Double = 0.28
+    var peelRotation: Double = 8
+    var peelSnapBackDuration: Double = 0.4
+    var peelSnapBackBounce: Double = 0.2
 
     // MARK: Screen sharing (5.2)
 
@@ -112,6 +188,22 @@ final class Tuning {
     /// and is hidden in Mission Control. For comparing how stickers behave when
     /// the desktop changes.
     var spacesBehaviorTransient = false
+    /// Overrides the system's "Reduce motion" for tests: `true` or `false` forces
+    /// it, `nil` follows the system.
+    var forcedReduceMotion: Bool?
+
+    /// "Reduce motion" is on: movement and rotation become a short cross-fade (spec 6.7).
+    var reduceMotion: Bool {
+        forcedReduceMotion ?? NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    }
+
+    /// On: a cursor that flew into the zone is ignored until it leaves and comes
+    /// back slowly. Off: it may stop in the zone and still call the pad.
+    var zoneRejectsFastEntry = false
+    /// What a draft with text does when the keyboard goes elsewhere or the desktop
+    /// changes. Off: it stays on screen. On: it closes and is kept as a draft, the
+    /// way Esc does. An empty draft always closes.
+    var draftWithTextClosesOnFocusLoss = false
     /// On (spec 4.10): ⌘Z brings a peeled sticker back while its toast is up. The
     /// key is taken from the app in front for those few seconds, or until the next click.
     var undoPeelUsesCommandZ = true
@@ -133,6 +225,12 @@ struct MotionCurve: Sendable {
     let c1y: Float
     let c2x: Float
     let c2y: Float
+
+    /// How far along the animation is when `progress` of its time has passed,
+    /// for animations driven frame by frame.
+    func value(at progress: Double) -> Double {
+        CubicBezier(Double(c1x), Double(c1y), Double(c2x), Double(c2y)).value(at: progress)
+    }
 
     var timingFunction: CAMediaTimingFunction {
         CAMediaTimingFunction(controlPoints: c1x, c1y, c2x, c2y)

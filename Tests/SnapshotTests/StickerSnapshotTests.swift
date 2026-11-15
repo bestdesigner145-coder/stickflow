@@ -21,8 +21,7 @@ final class StickerSnapshotTests: XCTestCase {
         case dark
     }
 
-    /// Small differences in text rendering between machines are not regressions.
-    private static let strategy = Snapshotting<NSImage, NSImage>.image(precision: 0.98, perceptualPrecision: 0.98)
+    private static let strategy = SnapshotRenderer.strategy
 
     func testStickerAtRest() {
         for fixture in [SeedFixture.plan, .long] {
@@ -93,7 +92,7 @@ final class StickerSnapshotTests: XCTestCase {
             ))
             XCTAssertEqual(controller.mode, .editMode)
         }
-        return Self.image(of: controller.rootView)
+        return SnapshotRenderer.image(of: controller.rootView)
     }
 
     private static func emptyDefaults() -> UserDefaults {
@@ -101,30 +100,5 @@ final class StickerSnapshotTests: XCTestCase {
         guard let defaults = UserDefaults(suiteName: name) else { return .standard }
         defaults.removePersistentDomain(forName: name)
         return defaults
-    }
-
-    /// Draws the view into a bitmap with one pixel per point, so that the picture
-    /// has the same size on a Retina display and on a CI runner.
-    private static func image(of view: NSView) -> NSImage {
-        view.layoutSubtreeIfNeeded()
-        view.displayIfNeeded()
-        let size = view.bounds.size
-        let image = NSImage(size: size)
-        guard let bitmap = NSBitmapImageRep(
-            bitmapDataPlanes: nil,
-            pixelsWide: Int(size.width.rounded()),
-            pixelsHigh: Int(size.height.rounded()),
-            bitsPerSample: 8,
-            samplesPerPixel: 4,
-            hasAlpha: true,
-            isPlanar: false,
-            colorSpaceName: .deviceRGB,
-            bytesPerRow: 0,
-            bitsPerPixel: 0
-        ) else { return image }
-        bitmap.size = size
-        view.cacheDisplay(in: view.bounds, to: bitmap)
-        image.addRepresentation(bitmap)
-        return image
     }
 }

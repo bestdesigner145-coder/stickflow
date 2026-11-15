@@ -67,6 +67,10 @@ final class Preferences {
     /// Take stickers off the screen while something records or shares it (spec 5.2).
     var hideDuringScreenSharing: Bool
     var showOverFullscreen: Bool
+    /// Which screen edge the pad is called from (spec 4.1).
+    var callEdge: CallEdge.Preference
+    /// The thin strip of paper at the edge that hints where the pad is.
+    var showsEdgeTab: Bool
     var defaultColor: PaperColor
     /// UUID of the display stickers live on; `nil` means the display with the menu bar.
     var stickerDisplayUUID: String?
@@ -86,6 +90,8 @@ final class Preferences {
         static let hideFromScreenCapture = "hideFromScreenCapture"
         static let hideDuringScreenSharing = "hideDuringScreenSharing"
         static let showOverFullscreen = "showOverFullscreen"
+        static let callEdge = "callEdge"
+        static let showsEdgeTab = "showsEdgeTab"
         static let defaultColor = "defaultColor"
         static let stickerDisplayUUID = "stickerDisplayUUID"
         static let editHintShownCount = "editHintShownCount"
@@ -102,6 +108,8 @@ final class Preferences {
             Key.hideFromScreenCapture: false,
             Key.hideDuringScreenSharing: true,
             Key.showOverFullscreen: false,
+            Key.callEdge: CallEdge.Preference.automatic.rawValue,
+            Key.showsEdgeTab: true,
             Key.defaultColor: PaperColor.default.rawValue,
             Key.editHintShownCount: 0,
         ])
@@ -114,6 +122,8 @@ final class Preferences {
         hideFromScreenCapture = defaults.bool(forKey: Key.hideFromScreenCapture)
         hideDuringScreenSharing = defaults.bool(forKey: Key.hideDuringScreenSharing)
         showOverFullscreen = defaults.bool(forKey: Key.showOverFullscreen)
+        callEdge = defaults.string(forKey: Key.callEdge).flatMap(CallEdge.Preference.init(rawValue:)) ?? .automatic
+        showsEdgeTab = defaults.bool(forKey: Key.showsEdgeTab)
         defaultColor = defaults.string(forKey: Key.defaultColor).flatMap { PaperColor(stored: $0) } ?? .default
         stickerDisplayUUID = defaults.string(forKey: Key.stickerDisplayUUID)
         editHintShownCount = defaults.integer(forKey: Key.editHintShownCount)
@@ -132,6 +142,8 @@ final class Preferences {
         defaults.set(hideFromScreenCapture, forKey: Key.hideFromScreenCapture)
         defaults.set(hideDuringScreenSharing, forKey: Key.hideDuringScreenSharing)
         defaults.set(showOverFullscreen, forKey: Key.showOverFullscreen)
+        defaults.set(callEdge.rawValue, forKey: Key.callEdge)
+        defaults.set(showsEdgeTab, forKey: Key.showsEdgeTab)
         defaults.set(defaultColor.rawValue, forKey: Key.defaultColor)
         if let stickerDisplayUUID {
             defaults.set(stickerDisplayUUID, forKey: Key.stickerDisplayUUID)

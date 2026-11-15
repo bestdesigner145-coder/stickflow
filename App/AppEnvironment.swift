@@ -17,6 +17,8 @@ final class AppEnvironment {
     let hotkeys = HotkeyService()
     let repository: any StickerStore
     let stickers: StickerManager
+    /// The call zone, the pad and the draft (stage 2).
+    let entry: EntryController
 
     private var statusItem: StatusItemController?
     private var reportedErrors: Set<String> = []
@@ -73,7 +75,7 @@ final class AppEnvironment {
         self.displays = displays
         self.clock = clock
         self.repository = repository
-        stickers = StickerManager(
+        let stickers = StickerManager(
             tuning: tuning,
             preferences: preferences,
             repository: repository,
@@ -81,6 +83,8 @@ final class AppEnvironment {
             clock: clock,
             pointer: PointerTracker(mouse: pointerSource, modifiers: pointerSource, clock: clock)
         )
+        self.stickers = stickers
+        entry = EntryController(tuning: tuning, preferences: preferences, displays: displays, stickers: stickers)
     }
 
     /// Settings that start empty and are never written to disk.
@@ -98,10 +102,23 @@ final class AppEnvironment {
         stickers.onUndoShortcutArmedChange = { [weak self] armed in
             self?.hotkeys.setUndoPeelArmed(armed)
         }
+        stickers.onPointerSample = { [weak self] sample in
+            self?.entry.pointerDidUpdate(sample)
+        }
+        stickers.alsoNeedsPolling = { [weak self] location in
+            self?.entry.needsPointer(at: location) ?? false
+        }
+        stickers.peelTarget = { [weak self] in
+            self?.entry.padPoint
+        }
+        stickers.onCaptureHidingChange = { [weak self] hidden in
+            self?.entry.setSuppressed(hidden)
+        }
         stickers.start()
+        entry.start()
         hotkeys.start(
             onQuickInput: { [weak self] in
-                self?.stickers.createSticker()
+                self?.entry.toggleDraft()
             },
             onToggleStickers: { [weak self] in
                 self?.stickers.toggleStickersHidden()

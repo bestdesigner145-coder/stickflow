@@ -9,6 +9,23 @@ import StickflowCore
 final class StickerManager: NSObject {
     /// Called with a localized title when storage fails.
     var onError: ((String, Error) -> Void)?
+    /// Where a peeled sticker flies to: the pad at the call edge (spec 4.10).
+    var peelTarget: (() -> CGPoint?)?
+
+    /// Where stickers fly and are peeled as pictures (spec 6.7).
+    let effectsOverlay = EffectsOverlay()
+
+    /// Frame of the screen the overlay should cover for a sticker at `frame`.
+    func screenFrame(around frame: CGRect) -> CGRect? {
+        (displays.screen(containing: frame) ?? displays.menuBarScreen)?.frame
+    }
+
+    /// Every pointer sample, for the call zone at the screen edge.
+    var onPointerSample: ((PointerSample) -> Void)?
+    /// Lets the call zone keep the pointer polled when no sticker needs it.
+    var alsoNeedsPolling: ((CGPoint) -> Bool)?
+    /// Called when a screen capture hides the stickers or lets them back.
+    var onCaptureHidingChange: ((Bool) -> Void)?
     /// Asks for the temporary ⌘Z ("bring the peeled sticker back") to be registered
     /// or released. See `HotkeyService.setUndoPeelArmed`.
     var onUndoShortcutArmedChange: ((Bool) -> Void)?
@@ -140,6 +157,50 @@ final class StickerManager: NSObject {
         controller.beginEditing(at: nil)
     }
 
+    /// Sticks what was written in the draft (spec 4.3, 4.4).
+    /// - Parameter draftFrame: where the draft was; the sticker flies from there
+    ///   to its place. Without it the sticker just appears.
+    @discardableResult
+    func stick(_ plan: PlainTextPlan.Result, rawInput: String, flyingFrom draftFrame: CGRect? = nil) -> StickerController? {
+        guard !plan.isEmpty else { return nil }
+        showAll()
+        let now = clock.now
+        let sticker = Sticker(
+            title: plan.title,
+            blocks: plan.blocks,
+            color: preferences.defaultColor,
+            source: .typed,
+            rawInput: rawInput,
+            createdAt: now,
+            stuckAt: now
+        )
+        save(sticker)
+        let controller = addController(for: sticker)
+        place(controller)
+        if let draftFrame {
+            controller.flyIn(from: draftFrame)
+        } else {
+            controller.show(animated: true)
+        }
+        pointer.kick()
+        return controller
+    }
+
+    /// Keeps a draft that was closed without sticking (spec 4.3: Esc saves it to history).
+    func keepDraft(_ plan: PlainTextPlan.Result, rawInput: String) {
+        guard !plan.isEmpty else { return }
+        let now = clock.now
+        save(Sticker(
+            title: plan.title,
+            blocks: plan.blocks,
+            status: .draft,
+            color: preferences.defaultColor,
+            source: .typed,
+            rawInput: rawInput,
+            createdAt: now
+        ))
+    }
+
     @discardableResult
     private func addController(for sticker: Sticker) -> StickerController {
         let controller = StickerController(sticker: sticker, tuning: tuning, preferences: preferences, clock: clock)
@@ -159,8 +220,11 @@ final class StickerManager: NSObject {
     /// Takes the sticker off the screen: done if every task is ticked, otherwise a
     /// draft. It stays in the database with the time it was peeled, and the toast
     /// offers to bring it back. The corner-peel gesture comes in stage 2.
-    func peel(_ controller: StickerController) {
-        guard let peeled = takeOff(controller) else { return }
+    /// - Parameters:
+    ///   - byGesture: torn off by its corner rather than with the "×" button.
+    ///   - turnsLeft: which way the sticker turns as it is torn off.
+    func peel(_ controller: StickerController, byGesture: Bool = false, turnsLeft: Bool = false) {
+        guard let peeled = takeOff(controller, byGesture: byGesture, turnsLeft: turnsLeft) else { return }
         announce([peeled])
     }
 
@@ -172,7 +236,7 @@ final class StickerManager: NSObject {
         announce(peeled)
     }
 
-    private func takeOff(_ controller: StickerController) -> PeeledSticker? {
+    private func takeOff(_ controller: StickerController, byGesture: Bool = false, turnsLeft: Bool = false) -> PeeledSticker? {
         controller.endEditing()
         guard !controller.isClosed else { return nil } // it was empty and got discarded
         let frame = controller.paperFrame
@@ -189,9 +253,12 @@ final class StickerManager: NSObject {
         unsaved.remove(id)
         controllers.removeAll { $0 === controller }
         peeledFrames[id] = frame
-        // It flies to the right edge of its screen, where the pad will live (stage 2).
-        let edge = wasOnScreen ? displays.screen(containing: frame)?.frame.maxX : nil
-        controller.peelAway(towardsX: edge)
+        // It flies into the pad at the call edge; without a pad, to the right edge of its screen.
+        var target: CGPoint?
+        if wasOnScreen {
+            target = peelTarget?() ?? displays.screen(containing: frame).map { CGPoint(x: $0.frame.maxX, y: frame.midY) }
+        }
+        controller.peelAway(towards: target, byGesture: byGesture, turnsLeft: turnsLeft)
         return PeeledSticker(id: id, paperFrame: frame)
     }
 
@@ -383,6 +450,7 @@ final class StickerManager: NSObject {
         guard hidden != areStickersHiddenByCapture else { return }
         areStickersHiddenByCapture = hidden
         applyVisibility()
+        onCaptureHidingChange?(hidden)
     }
 
     private func applyVisibility() {
@@ -596,6 +664,7 @@ final class StickerManager: NSObject {
     // MARK: Pointer and hint
 
     private func dispatch(_ sample: PointerSample) {
+        onPointerSample?(sample)
         guard !isAnythingHidden else { return }
         for controller in controllers {
             controller.pointerDidUpdate(sample)
@@ -603,6 +672,7 @@ final class StickerManager: NSObject {
     }
 
     private func needsPolling(at location: CGPoint) -> Bool {
+        if alsoNeedsPolling?(location) == true { return true }
         guard !isAnythingHidden else { return false }
         return controllers.contains { $0.wantsPointerUpdates(at: location) }
     }

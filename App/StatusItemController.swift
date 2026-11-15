@@ -123,7 +123,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     // MARK: Actions
 
     @objc private func newSticker() {
-        environment.stickers.createSticker()
+        environment.entry.toggleDraft()
     }
 
     @objc private func toggleStickers() {
@@ -140,6 +140,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     @objc private func pickDisplay(_ sender: NSMenuItem) {
         environment.stickers.setStickerDisplay(uuid: sender.representedObject as? String)
+        environment.entry.applySettings()
     }
 
     @objc private func toggleLaunchAtLogin() {

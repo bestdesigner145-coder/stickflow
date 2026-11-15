@@ -13,6 +13,8 @@ enum StickerZone {
     case checkbox(line: Int)
     /// Anywhere else on the paper; the point is in the text view's coordinates.
     case body(pointInTextView: NSPoint)
+    /// The bottom right corner: drag to peel the sticker off (spec 4.10).
+    case corner
 }
 
 @MainActor
@@ -119,6 +121,7 @@ final class StickerRootView: NSView {
         addSubview(counterLabel)
         addSubview(menuButton)
         addSubview(closeButton)
+        addSubview(foldOverlay)
 
         // The counter sits on the title line, so it has to follow the text when it scrolls.
         scrollView.contentView.postsBoundsChangedNotifications = true
@@ -161,12 +164,117 @@ final class StickerRootView: NSView {
         bounds.insetBy(dx: metrics.margin, dy: metrics.margin)
     }
 
+    /// Side of the square at the bottom right that peels the sticker off.
+    var cornerSize: CGFloat = 28
+
+    private var cornerRect: NSRect {
+        let paper = paperRect
+        return NSRect(x: paper.maxX - cornerSize, y: paper.maxY - cornerSize, width: cornerSize, height: cornerSize)
+    }
+
+    // MARK: Folded corner and the ring of air
+
+    private let foldOverlay = FoldOverlayView(frame: .zero)
+    private var cornerPull = CGSize.zero
+
+    /// Folds the bottom right corner as if it had been pulled by `offset`
+    /// (in this view's coordinates: left and up are negative). Zero lays it flat.
+    func setCornerPull(_ offset: CGSize) {
+        cornerPull = offset
+        applyCornerPull()
+    }
+
+    private func applyCornerPull() {
+        let paper = paperRect
+        let corner = CGPoint(x: paper.maxX, y: paper.maxY)
+        let target = CGPoint(x: corner.x + cornerPull.width, y: corner.y + cornerPull.height)
+        guard let layer, let fold = PaperFold.make(paper: paper, corner: corner, pulledTo: target) else {
+            layer?.mask = nil
+            foldOverlay.setFlap(nil, color: .clear)
+            shadowView.keptShape = nil
+            effectView.isHidden = false
+            return
+        }
+        // The paper under the fold is gone: cut it out of everything this view draws.
+        // The blur behind the paper does not obey the mask, so it rests meanwhile;
+        // a folded sticker is lifted and opaque anyway.
+        effectView.isHidden = true
+        let flipped = layer.contentsAreFlipped()
+        let height = bounds.height
+        func inLayer(_ point: CGPoint) -> CGPoint {
+            flipped ? point : CGPoint(x: point.x, y: height - point.y)
+        }
+        let path = CGMutablePath()
+        // Far beyond the view: the mask must cut the hole and nothing else.
+        path.addRect(layer.bounds.insetBy(dx: -4000, dy: -4000))
+        path.addLines(between: fold.hole.map(inLayer))
+        path.closeSubpath()
+        let mask = (layer.mask as? CAShapeLayer) ?? CAShapeLayer()
+        mask.frame = layer.bounds
+        mask.fillRule = .evenOdd
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        mask.path = path
+        CATransaction.commit()
+        layer.mask = mask
+
+        foldOverlay.setFlap(fold.flap.map { CGPoint(x: $0.x, y: height - $0.y) }, color: foldBackColor)
+        // The shadow falls from the paper that is still there.
+        shadowView.keptShape = fold.kept.map { CGPoint(x: $0.x, y: height - $0.y) }
+    }
+
+    private var paperColorForFold = NSColor.white
+
+    /// The back of the sheet, seen where a corner is turned over.
+    var foldBackColor: NSColor {
+        let dark = effectiveAppearance.isDark
+        return paperColorForFold.blended(withFraction: dark ? 0.12 : 0.07, of: dark ? .white : .black) ?? paperColorForFold
+    }
+
+    /// A picture of the flat paper with everything on it, without the shadow and
+    /// without a folded corner, for the `EffectsOverlay`.
+    /// - Parameter scale: pixels per point of the screen it will be shown on.
+    func paperSnapshot(scale: CGFloat) -> CGImage? {
+        let pull = cornerPull
+        if pull != .zero { setCornerPull(.zero) }
+        defer {
+            if pull != .zero { setCornerPull(pull) }
+        }
+        layoutSubtreeIfNeeded()
+        displayIfNeeded()
+        let paper = paperRect
+        guard paper.width > 0, paper.height > 0, let bitmap = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: Int((paper.width * scale).rounded()),
+            pixelsHigh: Int((paper.height * scale).rounded()),
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        ) else { return nil }
+        bitmap.size = paper.size
+        cacheDisplay(in: paper, to: bitmap)
+        return bitmap.cgImage
+    }
+
+    /// The ring of "air" pushed out when a sticker lands (spec 4.4).
+    func playAirRing(reach: CGFloat, opacity: Float, duration: TimeInterval) {
+        let paper = paperRect
+        let inOverlay = CGRect(x: paper.minX, y: bounds.height - paper.maxY, width: paper.width, height: paper.height)
+        foldOverlay.playRing(around: inOverlay, radius: metrics.cornerRadius, reach: reach, opacity: opacity, duration: duration)
+    }
+
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
         relayout()
     }
 
     func relayout() {
+        foldOverlay.frame = bounds
+        if cornerPull != .zero { applyCornerPull() }
         let paper = paperRect
         guard paper.width > 0, paper.height > 0 else { return }
 
@@ -392,6 +500,7 @@ final class StickerRootView: NSView {
     func applyColors(_ color: PaperColor, duration: TimeInterval = 0, curve: MotionCurve = .ease) {
         let dark = effectiveAppearance.isDark
         let paper = color.paperColor(dark: dark)
+        paperColorForFold = paper
         if duration > 0 {
             // Text and markers are redrawn in the new colours; cross-fade the redraw.
             let redrawn: [NSView] = [scrollView, overflowFade, counterLabel, moreLabel, menuButton, closeButton]
@@ -422,40 +531,6 @@ final class StickerRootView: NSView {
         transition.duration = duration
         transition.timingFunction = curve.timingFunction
         layer.add(transition, forKey: "appearanceFade")
-    }
-
-    /// Scales the whole sticker about its centre (appearing and peeling, spec 6.7).
-    /// Only what is on screen changes; layout and hit-testing stay as they are.
-    /// - Parameter keepsFinalState: leave the sticker at `end` when the animation
-    ///   is over, for a sticker that is on its way out.
-    func animateScale(
-        from start: CGFloat,
-        to end: CGFloat,
-        duration: TimeInterval,
-        curve: MotionCurve,
-        keepsFinalState: Bool = false
-    ) {
-        guard let layer, duration > 0 else { return }
-        // A layer scales about its anchor point; shift so that the centre stays put.
-        let centre = CGPoint(
-            x: layer.bounds.width * (0.5 - layer.anchorPoint.x),
-            y: layer.bounds.height * (0.5 - layer.anchorPoint.y)
-        )
-        func transform(_ scale: CGFloat) -> CATransform3D {
-            var result = CATransform3DMakeTranslation(-centre.x, -centre.y, 0)
-            result = CATransform3DConcat(result, CATransform3DMakeScale(scale, scale, 1))
-            return CATransform3DConcat(result, CATransform3DMakeTranslation(centre.x, centre.y, 0))
-        }
-        let animation = CABasicAnimation(keyPath: "transform")
-        animation.fromValue = NSValue(caTransform3D: transform(start))
-        animation.toValue = NSValue(caTransform3D: transform(end))
-        animation.duration = duration
-        animation.timingFunction = curve.timingFunction
-        if keepsFinalState {
-            animation.fillMode = .forwards
-            animation.isRemovedOnCompletion = false
-        }
-        layer.add(animation, forKey: "stickerScale")
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -506,6 +581,9 @@ final class StickerRootView: NSView {
     func zone(at point: NSPoint) -> StickerZone {
         if point.y < paperRect.minY + metrics.stripHeight {
             return .glueStrip
+        }
+        if showsChrome, !isEditing, cornerRect.contains(point) {
+            return .corner
         }
         let inTextView = textView.convert(point, from: self)
         if let line = textView.todoLine(at: inTextView) {
@@ -572,9 +650,86 @@ final class StickerRootView: NSView {
             NSCursor.openHand.set()
         case .checkbox:
             NSCursor.pointingHand.set()
+        case .corner:
+            NSCursor.openHand.set()
         case .body:
             // While editing, the text view manages its own I-beam.
             if !isEditing { NSCursor.iBeam.set() }
         }
+    }
+}
+
+/// Draws what lies above the paper: the turned-over corner and the ring of air.
+/// It hosts its own layers with the origin at the bottom left, so their
+/// geometry does not depend on how AppKit sets up the sticker view's layer.
+final class FoldOverlayView: NSView {
+    private let flapLayer = CAShapeLayer()
+    private let ringLayer = CAShapeLayer()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        let host = CALayer()
+        layer = host
+        wantsLayer = true
+
+        flapLayer.shadowColor = NSColor.black.cgColor
+        flapLayer.shadowOpacity = 0.28
+        flapLayer.shadowRadius = 3
+        flapLayer.shadowOffset = CGSize(width: -1, height: -1)
+        flapLayer.strokeColor = NSColor.black.withAlphaComponent(0.10).cgColor
+        flapLayer.lineWidth = 0.5
+        flapLayer.isHidden = true
+        host.addSublayer(flapLayer)
+
+        ringLayer.fillColor = nil
+        ringLayer.strokeColor = NSColor.white.cgColor
+        ringLayer.lineWidth = 1.5
+        ringLayer.opacity = 0
+        host.addSublayer(ringLayer)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    /// Clicks belong to the sticker underneath.
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    /// - Parameter polygon: the flap in this view's coordinates; `nil` hides it.
+    func setFlap(_ polygon: [CGPoint]?, color: NSColor) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if let polygon, polygon.count >= 3 {
+            let path = CGMutablePath()
+            path.addLines(between: polygon)
+            path.closeSubpath()
+            flapLayer.path = path
+            flapLayer.fillColor = color.cgColor
+            flapLayer.isHidden = false
+        } else {
+            flapLayer.isHidden = true
+        }
+        CATransaction.commit()
+    }
+
+    func playRing(around rect: CGRect, radius: CGFloat, reach: CGFloat, opacity: Float, duration: TimeInterval) {
+        guard duration > 0 else { return }
+        let start = CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil)
+        let grown = rect.insetBy(dx: -reach, dy: -reach)
+        let end = CGPath(roundedRect: grown, cornerWidth: radius + reach, cornerHeight: radius + reach, transform: nil)
+
+        let grow = CABasicAnimation(keyPath: "path")
+        grow.fromValue = start
+        grow.toValue = end
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = opacity
+        fade.toValue = 0
+        let group = CAAnimationGroup()
+        group.animations = [grow, fade]
+        group.duration = duration
+        group.timingFunction = MotionCurve.easeOut.timingFunction
+        // The layer itself stays invisible; only the animation shows.
+        ringLayer.add(group, forKey: "airRing")
     }
 }

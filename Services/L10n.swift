@@ -24,6 +24,12 @@ enum L10n {
     static var stickerStripMenu: String { String(localized: "sticker.strip.menu") }
     static var stickerPlaceholder: String { String(localized: "sticker.placeholder") }
 
+    static var padLabel: String { String(localized: "pad.label") }
+    static var draftTitle: String { String(localized: "draft.title") }
+    static var draftPlaceholder: String { String(localized: "draft.placeholder") }
+    static var draftStick: String { String(localized: "draft.stick") }
+    static var draftDictate: String { String(localized: "draft.dictate") }
+
     static var toastPeeledOne: String { String(localized: "toast.peeled_one") }
     static var toastRestore: String { String(localized: "toast.restore") }
 
