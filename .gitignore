@@ -1,0 +1,26 @@
+# macOS
+.DS_Store
+
+# Xcode — the project is generated from project.yml by XcodeGen
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+DerivedData/
+build/
+App/Info.plist
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Secrets never belong in the repository (spec 11.2)
+*.p12
+*.cer
+*.pem
+*.key
+*.mobileprovision
+sparkle_private_key*
+ed25519*
+.env
+.env.*

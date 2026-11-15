@@ -1,0 +1,43 @@
+# SwiftLint configuration (spec 17.3). CI runs `swiftlint lint --strict`.
+included:
+  - App
+  - Features
+  - Services
+  - StickflowCore/Sources
+  - StickflowCore/Tests
+  - Tests
+  - Tuning.swift
+excluded:
+  - StickflowCore/.build
+  - build
+
+# SwiftFormat owns layout; these keep the two tools from arguing.
+trailing_comma:
+  mandatory_comma: true
+
+line_length:
+  warning: 140
+  ignores_comments: true
+  ignores_interpolated_strings: true
+  ignores_urls: true
+
+identifier_name:
+  min_length: 2
+  excluded: [x, y]
+
+large_tuple:
+  warning: 3
+
+function_parameter_count:
+  warning: 7
+
+# The sticker window, its editor and its manager are large by nature. The limits
+# are loose for now; tighten them when the state machine moves out (stage 2).
+type_body_length:
+  warning: 650
+file_length:
+  warning: 900
+function_body_length:
+  warning: 90
+cyclomatic_complexity:
+  warning: 20
