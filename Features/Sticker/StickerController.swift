@@ -32,6 +32,14 @@ final class StickerController: NSObject {
     private(set) var isLeaving = false
     private var isDragging = false
     private var isMenuOpen = false
+    /// Flying from the draft to its place (spec 4.4).
+    private(set) var isAirborne = false
+    private let motion = FrameAnimator()
+    /// The corner is being pulled (spec 4.10).
+    private(set) var isPeeling = false
+    private var peelStartMouse = CGPoint.zero
+    private var peelTrail: [(point: CGPoint, time: TimeInterval)] = []
+    private var peelPull = CGSize.zero
 
     private var dragStartMouse = CGPoint.zero
     private var dragStartOrigin = CGPoint.zero
@@ -87,6 +95,8 @@ final class StickerController: NSObject {
 
     func hide() {
         guard !isClosed, !isLeaving else { return }
+        settleFlight()
+        cancelPeel()
         endEditing()
         panel.orderOut(nil)
     }
@@ -99,8 +109,15 @@ final class StickerController: NSObject {
     /// `edgeX`, shrinks and fades, then its window closes. The caller has already
     /// saved the model.
     /// - Parameter edgeX: screen x of the edge to fly to; `nil` just fades.
-    func peelAway(towardsX edgeX: CGFloat?) {
+    /// - Parameters:
+    ///   - target: screen point the sticker flies to (the pad); `nil` just fades.
+    ///   - byGesture: torn off by its corner, so it turns a little as it goes.
+    ///   - turnsLeft: which way it turns.
+    func peelAway(towards target: CGPoint?, byGesture: Bool = false, turnsLeft: Bool = false) {
         guard !isClosed, !isLeaving else { return }
+        settleFlight()
+        motion.cancel()
+        isPeeling = false
         isLeaving = true
         removeClickMonitors()
         cancelIdleTimer()
@@ -112,26 +129,29 @@ final class StickerController: NSObject {
         }
 
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        let duration = tuning.scaled(reduceMotion ? tuning.reducedMotionFade : tuning.peelDuration)
+        let moving = byGesture ? tuning.peelGestureDuration : tuning.peelDuration
+        let duration = tuning.scaled(reduceMotion ? tuning.reducedMotionFade : moving)
         let curve: MotionCurve = reduceMotion ? .ease : .easeInOut
-        let target: NSRect?
-        if !reduceMotion, let edgeX {
+        let destination: NSRect?
+        if !reduceMotion, let target {
+            let turn = byGesture ? CGFloat(tuning.peelRotation) * (turnsLeft ? 1 : -1) : 0
             rootView.animateScale(
                 from: 1,
                 to: CGFloat(tuning.peelEndScale),
+                rotation: turn,
                 duration: duration,
                 curve: curve,
                 keepsFinalState: true
             )
-            target = panel.frame.offsetBy(dx: edgeX - panel.frame.midX, dy: 0)
+            destination = panel.frame.offsetBy(dx: target.x - panel.frame.midX, dy: target.y - panel.frame.midY)
         } else {
-            target = nil
+            destination = nil
         }
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = duration
             context.timingFunction = curve.timingFunction
-            if let target {
-                panel.animator().setFrame(target, display: false)
+            if let destination {
+                panel.animator().setFrame(destination, display: false)
             }
             panel.animator().alphaValue = 0
         }, completionHandler: { [self] in
@@ -144,6 +164,7 @@ final class StickerController: NSObject {
     func close() {
         guard !isClosed else { return }
         isClosed = true
+        motion.cancel()
         removeClickMonitors()
         cancelIdleTimer()
         rootView.delegate = nil
@@ -250,7 +271,9 @@ final class StickerController: NSObject {
     }
 
     private func applyMode(from previous: Mode?, animated: Bool) {
-        let isLifted = mode == .editMode || mode == .editing
+        // In the user's hands, or in the air on its way to its place: opaque, with a wide shadow.
+        let isInHand = mode == .editMode || mode == .editing
+        let isLifted = isInHand || isAirborne
         let reduceTransparency = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
 
         let restPaperOpacity = reduceTransparency ? 1.0 : preferences.paperOpacity
@@ -272,10 +295,15 @@ final class StickerController: NSObject {
         let curve = MotionCurve.easeOut
 
         // A long sticker scrolled with the edit key returns to its beginning at rest.
-        rootView.setChromeVisible(isLifted, scrollResetDuration: duration)
+        rootView.setChromeVisible(isInHand, scrollResetDuration: duration)
         rootView.setPaperOpacity(CGFloat(paperOpacity), duration: duration, curve: curve)
         rootView.setTextOpacity(CGFloat(textOpacity), duration: duration, curve: curve)
         rootView.setShadow(shadowSpec, duration: duration, curve: curve)
+        // With the edit key held the corner lifts a little: this is where the sticker peels off.
+        if !isPeeling {
+            let hint = mode == .editMode ? -CGFloat(tuning.peelCornerHint) : 0
+            rootView.setCornerPull(CGSize(width: hint, height: hint))
+        }
 
         if duration > 0 {
             NSAnimationContext.runAnimationGroup { context in
@@ -290,7 +318,7 @@ final class StickerController: NSObject {
 
     /// The shadow for the current state and theme (spec 6.2).
     private var shadowSpec: ShadowSpec {
-        let isLifted = mode == .editMode || mode == .editing
+        let isLifted = mode == .editMode || mode == .editing || isAirborne
         let darkBoost = rootView.effectiveAppearance.isDark ? tuning.darkShadowMultiplier : 1.0
         if isLifted {
             return ShadowSpec(
@@ -306,12 +334,158 @@ final class StickerController: NSObject {
         )
     }
 
+    // MARK: Sticking (spec 4.4)
+
+    /// Flies the sticker from where the draft was to its place and lands it there
+    /// with a squash, a settling shadow and a ring of air.
+    /// - Parameter start: the draft's frame on screen; the flight starts at its top left corner.
+    func flyIn(from start: CGRect) {
+        guard !isClosed, !isLeaving else { return }
+        let duration = tuning.scaled(tuning.flightDuration)
+        guard duration > 0, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            // Reduce Motion: a cross-fade instead of the flight and the impact.
+            show(animated: true)
+            return
+        }
+        let margin = rootView.metrics.margin
+        let destination = panel.frame.origin
+        let paperTopLeft = CGPoint(x: start.minX, y: start.maxY)
+        let origin = CGPoint(x: paperTopLeft.x - margin, y: paperTopLeft.y - panel.frame.height + margin)
+
+        isAirborne = true
+        applyMode(from: nil, animated: false)
+        panel.setFrameOrigin(origin)
+        panel.alphaValue = 1
+        panel.orderFrontRegardless()
+        rootView.animateScale(
+            from: 1,
+            to: CGFloat(tuning.flightScale),
+            duration: min(duration, tuning.scaled(0.1)),
+            curve: .easeOut,
+            keepsFinalState: true
+        )
+        let lift = CGFloat(tuning.flightLift)
+        motion.run(duration: duration, step: { [weak self] elapsed in
+            guard let self else { return }
+            let progress = MotionCurve.easeInOut.value(at: elapsed / duration)
+            self.panel.setFrameOrigin(FlightPath.point(from: origin, to: destination, progress: progress, lift: lift))
+        }, completion: { [weak self] in
+            self?.land(at: destination)
+        })
+    }
+
+    /// Ends a flight at once: the sticker is in its place, without the impact
+    /// (spec 6.7: any action of the user finishes an animation).
+    func settleFlight() {
+        guard isAirborne else { return }
+        isAirborne = false // `land` then skips the impact
+        motion.finish()
+    }
+
+    private func land(at destination: CGPoint) {
+        let withImpact = isAirborne
+        isAirborne = false
+        panel.setFrameOrigin(destination)
+        guard withImpact else {
+            rootView.removeScaleAnimation()
+            applyMode(from: nil, animated: false)
+            return
+        }
+        let impact = tuning.scaled(tuning.impactDuration)
+        rootView.animateScale(
+            through: [CGFloat(tuning.flightScale), CGFloat(tuning.impactSquash), 1],
+            duration: impact,
+            curve: .easeOut
+        )
+        // The shadow lands with the paper: wide and soft becomes close and sharp.
+        applyMode(from: .editMode, animated: true)
+        rootView.playAirRing(
+            reach: CGFloat(tuning.airRingReach),
+            opacity: Float(tuning.airRingOpacity),
+            duration: tuning.scaled(tuning.airRingDuration)
+        )
+        NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
+        manager?.pointerNeedsAttention()
+    }
+
+    // MARK: Peeling by the corner (spec 4.10)
+
+    /// The corner was grabbed at `location` (screen coordinates).
+    func beginPeel(at location: CGPoint, time: TimeInterval) {
+        guard !isClosed, !isLeaving, !isPeeling else { return }
+        settleFlight()
+        motion.cancel()
+        isPeeling = true
+        peelStartMouse = location
+        peelTrail = [(location, time)]
+        let hint = -CGFloat(tuning.peelCornerHint)
+        peelPull = CGSize(width: hint, height: hint)
+        NSCursor.closedHand.set()
+    }
+
+    /// The corner follows the cursor one to one.
+    func updatePeel(to location: CGPoint, time: TimeInterval) {
+        guard isPeeling else { return }
+        peelTrail.append((location, time))
+        if peelTrail.count > 12 { peelTrail.removeFirst(peelTrail.count - 12) }
+        let hint = -CGFloat(tuning.peelCornerHint)
+        // Screen y grows upwards, the view's y grows downwards.
+        peelPull = CGSize(
+            width: hint + location.x - peelStartMouse.x,
+            height: hint - (location.y - peelStartMouse.y)
+        )
+        rootView.setCornerPull(peelPull)
+    }
+
+    /// The corner was let go: far or fast enough and the sticker comes off,
+    /// otherwise the corner springs back.
+    func endPeel(at location: CGPoint, time: TimeInterval) {
+        guard isPeeling else { return }
+        updatePeel(to: location, time: time)
+        let distance = Double(hypot(location.x - peelStartMouse.x, location.y - peelStartMouse.y))
+        let speed = PeelGesture.releaseSpeed(trail: peelTrail)
+        let gesture = PeelGesture(distanceThreshold: tuning.peelDistance, speedThreshold: tuning.peelSpeed)
+        if gesture.comesOff(distance: distance, speed: speed), let manager {
+            manager.peel(self, byGesture: true, turnsLeft: location.x < peelStartMouse.x)
+            return
+        }
+        snapCornerBack()
+    }
+
+    /// Lets go of the corner without peeling, e.g. when the sticker is hidden mid-gesture.
+    func cancelPeel() {
+        guard isPeeling else { return }
+        motion.cancel()
+        isPeeling = false
+        applyMode(from: nil, animated: false)
+    }
+
+    private func snapCornerBack() {
+        let from = peelPull
+        let hint = mode == .editMode ? -CGFloat(tuning.peelCornerHint) : 0
+        let spring = Spring(duration: tuning.scaled(tuning.peelSnapBackDuration), bounce: tuning.peelSnapBackBounce)
+        motion.run(duration: spring.settlingTime, step: { [weak self] elapsed in
+            guard let self else { return }
+            let progress = CGFloat(spring.value(at: elapsed))
+            self.rootView.setCornerPull(CGSize(
+                width: from.width + (hint - from.width) * progress,
+                height: from.height + (hint - from.height) * progress
+            ))
+        }, completion: { [weak self] in
+            guard let self else { return }
+            self.isPeeling = false
+            self.machine.cancelPendingRelease()
+            self.applyMode(from: nil, animated: false)
+            self.manager?.pointerNeedsAttention()
+        })
+    }
+
     // MARK: Pointer
 
     /// True while this sticker needs 60 Hz pointer samples.
     func wantsPointerUpdates(at location: CGPoint) -> Bool {
         guard isOnScreen else { return false }
-        if isDragging || machine.needsContinuousInput {
+        if isDragging || isPeeling || machine.needsContinuousInput {
             return true
         }
         let reach = CGFloat(tuning.pointerPollProximity)
@@ -321,7 +495,7 @@ final class StickerController: NSObject {
     /// Turns what the pointer does into input for the state machine (in
     /// `StickflowCore`, where it is unit-tested) and shows the mode it answers with.
     func pointerDidUpdate(_ sample: PointerSample) {
-        guard isOnScreen, !isDragging, !isMenuOpen else { return }
+        guard isOnScreen, !isDragging, !isPeeling, !isAirborne, !isMenuOpen else { return }
 
         let paper = paperFrame
         let proximity = CGFloat(tuning.editKeyProximity)
@@ -489,6 +663,7 @@ final class StickerController: NSObject {
     // MARK: Moving
 
     private func beginDrag() {
+        settleFlight()
         isDragging = true
         dragStartMouse = NSEvent.mouseLocation
         dragStartOrigin = panel.frame.origin
@@ -569,6 +744,8 @@ extension StickerController: StickerRootViewDelegate {
             } else {
                 beginDrag()
             }
+        case .corner:
+            beginPeel(at: NSEvent.mouseLocation, time: event.timestamp)
         case let .checkbox(line):
             // Ticks the task without entering editing (spec 4.6).
             view.textView.toggleDone(line: line)
@@ -578,6 +755,10 @@ extension StickerController: StickerRootViewDelegate {
     }
 
     func rootView(_ view: StickerRootView, mouseDraggedWith event: NSEvent) {
+        if isPeeling {
+            updatePeel(to: NSEvent.mouseLocation, time: event.timestamp)
+            return
+        }
         guard isDragging else { return }
         // A drag that has started continues even if the edit key is released (spec 4.6).
         let mouse = NSEvent.mouseLocation
@@ -588,6 +769,10 @@ extension StickerController: StickerRootViewDelegate {
     }
 
     func rootView(_ view: StickerRootView, mouseUpWith event: NSEvent) {
+        if isPeeling {
+            endPeel(at: NSEvent.mouseLocation, time: event.timestamp)
+            return
+        }
         guard isDragging else { return }
         isDragging = false
         machine.cancelPendingRelease()

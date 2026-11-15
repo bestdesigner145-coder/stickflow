@@ -9,6 +9,8 @@ import StickflowCore
 final class StickerManager: NSObject {
     /// Called with a localized title when storage fails.
     var onError: ((String, Error) -> Void)?
+    /// Where a peeled sticker flies to: the pad at the call edge (spec 4.10).
+    var peelTarget: (() -> CGPoint?)?
     /// Every pointer sample, for the call zone at the screen edge.
     var onPointerSample: ((PointerSample) -> Void)?
     /// Lets the call zone keep the pointer polled when no sticker needs it.
@@ -146,10 +148,11 @@ final class StickerManager: NSObject {
         controller.beginEditing(at: nil)
     }
 
-    /// Sticks what was written in the draft (spec 4.3, 4.4). The flight and the
-    /// impact come later in stage 2; for now the sticker appears in its place.
+    /// Sticks what was written in the draft (spec 4.3, 4.4).
+    /// - Parameter draftFrame: where the draft was; the sticker flies from there
+    ///   to its place. Without it the sticker just appears.
     @discardableResult
-    func stick(_ plan: PlainTextPlan.Result, rawInput: String) -> StickerController? {
+    func stick(_ plan: PlainTextPlan.Result, rawInput: String, flyingFrom draftFrame: CGRect? = nil) -> StickerController? {
         guard !plan.isEmpty else { return nil }
         showAll()
         let now = clock.now
@@ -165,7 +168,11 @@ final class StickerManager: NSObject {
         save(sticker)
         let controller = addController(for: sticker)
         place(controller)
-        controller.show(animated: true)
+        if let draftFrame {
+            controller.flyIn(from: draftFrame)
+        } else {
+            controller.show(animated: true)
+        }
         pointer.kick()
         return controller
     }
@@ -204,8 +211,11 @@ final class StickerManager: NSObject {
     /// Takes the sticker off the screen: done if every task is ticked, otherwise a
     /// draft. It stays in the database with the time it was peeled, and the toast
     /// offers to bring it back. The corner-peel gesture comes in stage 2.
-    func peel(_ controller: StickerController) {
-        guard let peeled = takeOff(controller) else { return }
+    /// - Parameters:
+    ///   - byGesture: torn off by its corner rather than with the "×" button.
+    ///   - turnsLeft: which way the sticker turns as it is torn off.
+    func peel(_ controller: StickerController, byGesture: Bool = false, turnsLeft: Bool = false) {
+        guard let peeled = takeOff(controller, byGesture: byGesture, turnsLeft: turnsLeft) else { return }
         announce([peeled])
     }
 
@@ -217,7 +227,7 @@ final class StickerManager: NSObject {
         announce(peeled)
     }
 
-    private func takeOff(_ controller: StickerController) -> PeeledSticker? {
+    private func takeOff(_ controller: StickerController, byGesture: Bool = false, turnsLeft: Bool = false) -> PeeledSticker? {
         controller.endEditing()
         guard !controller.isClosed else { return nil } // it was empty and got discarded
         let frame = controller.paperFrame
@@ -234,9 +244,12 @@ final class StickerManager: NSObject {
         unsaved.remove(id)
         controllers.removeAll { $0 === controller }
         peeledFrames[id] = frame
-        // It flies to the right edge of its screen, where the pad will live (stage 2).
-        let edge = wasOnScreen ? displays.screen(containing: frame)?.frame.maxX : nil
-        controller.peelAway(towardsX: edge)
+        // It flies into the pad at the call edge; without a pad, to the right edge of its screen.
+        var target: CGPoint?
+        if wasOnScreen {
+            target = peelTarget?() ?? displays.screen(containing: frame).map { CGPoint(x: $0.frame.maxX, y: frame.midY) }
+        }
+        controller.peelAway(towards: target, byGesture: byGesture, turnsLeft: turnsLeft)
         return PeeledSticker(id: id, paperFrame: frame)
     }
 

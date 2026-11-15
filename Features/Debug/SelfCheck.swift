@@ -510,7 +510,10 @@ enum SelfCheck {
                 check(entry.phase == .open, "the pad stays out while the draft is open")
 
                 draft.submit()
-                await pause(0.6)
+                await pause(0.12)
+                check(stickers.controllers.last?.isAirborne == true, "the new sticker flies from the draft to its place")
+                await pause(1.0)
+                check(stickers.controllers.last?.isAirborne == false, "the flight ends")
                 check(!draft.isOpen, "sticking closes the draft")
                 check(NSApp.keyWindow == nil, "the keyboard goes back after the draft closes")
                 check(stickers.controllers.count == stickersBefore + 1, "the draft becomes a sticker")
@@ -518,6 +521,10 @@ enum SelfCheck {
                     let got = stuck.sticker.blocks.map { "\($0.kind.rawValue):\($0.text)" }
                     check(stuck.sticker.title == "План" && got == ["todo:Купить молоко", "bullet:заметка"], "its lines become the title and the blocks (\(stuck.sticker.title), \(got))")
                     check(stuck.sticker.rawInput == "План\nКупить молоко\n- заметка", "the text as typed is kept with the sticker")
+                    check(stuck.mode == .rest && abs(Double(stuck.panel.alphaValue) - 1) < 0.02, "after landing the sticker is at rest")
+                    let landed = stuck.paperFrame
+                    await pause(0.3)
+                    check(stuck.paperFrame == landed, "and it stays where it landed (\(landed))")
                 }
                 hold(far, for: 0.5)
                 check(entry.phase == .idle, "with the draft gone and the cursor away the pad hides")
@@ -547,6 +554,62 @@ enum SelfCheck {
                 check(false, "there is a call zone on the sticker screen")
             }
             entry.ignoresLivePointer = false
+
+            // 13. Peeling by the corner (spec 4.10).
+            if let target = stickers.controllers.last {
+                let countBefore = stickers.controllers.count
+                let corner = CGPoint(x: target.paperFrame.maxX - 6, y: target.paperFrame.minY + 6)
+                var moment = ProcessInfo.processInfo.systemUptime
+                func pull(by step: CGFloat, steps: Int, every interval: Double) -> CGPoint {
+                    var location = corner
+                    for index in 1...steps {
+                        moment += interval
+                        location = CGPoint(x: corner.x - step * CGFloat(index), y: corner.y + step * CGFloat(index))
+                        target.updatePeel(to: location, time: moment)
+                    }
+                    return location
+                }
+
+                // A short, slow pull: the corner follows, then springs back.
+                target.beginPeel(at: corner, time: moment)
+                var released = pull(by: 3, steps: 10, every: 0.05)
+                check(target.isPeeling, "the corner can be pulled")
+                await pause(0.3)
+                if let screen = environment.displays.menuBarScreen {
+                    _ = captureScreen(target.panel.frame, on: screen, name: "14-screen-fold")
+                }
+                target.endPeel(at: released, time: moment + 0.3)
+                await pause(1.0)
+                check(!target.isPeeling && !target.isClosed, "pulled 42 pt and let go slowly, the corner springs back")
+                check(stickers.controllers.count == countBefore, "and the sticker stays")
+
+                // A long pull: past 70 pt the sticker comes off.
+                moment = ProcessInfo.processInfo.systemUptime
+                target.beginPeel(at: corner, time: moment)
+                released = pull(by: 9, steps: 10, every: 0.03)
+                await pause(0.2)
+                if let screen = environment.displays.menuBarScreen {
+                    _ = captureScreen(target.panel.frame, on: screen, name: "14b-screen-fold-deep")
+                }
+                target.endPeel(at: released, time: moment + 0.2)
+                check(stickers.controllers.count == countBefore - 1, "pulled 127 pt, the sticker comes off")
+                check(stickers.isUndoToastVisible, "and the toast offers to bring it back")
+                await pause(0.7)
+                check(target.isClosed, "the torn-off sticker flies away and its window closes")
+
+                // A short but quick jerk is enough too.
+                if let quick = stickers.controllers.last {
+                    let grip = CGPoint(x: quick.paperFrame.maxX - 6, y: quick.paperFrame.minY + 6)
+                    let start = ProcessInfo.processInfo.systemUptime
+                    quick.beginPeel(at: grip, time: start)
+                    quick.updatePeel(to: CGPoint(x: grip.x - 10, y: grip.y + 10), time: start + 0.01)
+                    quick.endPeel(at: CGPoint(x: grip.x - 24, y: grip.y + 24), time: start + 0.02)
+                    check(stickers.controllers.count == countBefore - 2, "a quick jerk of 34 pt peels the sticker as well")
+                    await pause(0.7)
+                }
+            } else {
+                check(false, "there is a sticker to peel")
+            }
         }
 
         // MARK: Snapshots

@@ -146,6 +146,13 @@ final class EntryController: NSObject {
         return pad.intersection(window)
     }
 
+    /// The middle of the pad's edge on screen: where peeled stickers fly to.
+    var padPoint: CGPoint? {
+        guard !isSuppressed, let layout else { return nil }
+        let edgeX = layout.edge.side == .right ? layout.screen.frame.maxX : layout.screen.frame.minX
+        return CGPoint(x: edgeX, y: layout.zone.midY)
+    }
+
     /// The call zone in screen coordinates, for tests.
     var zoneFrame: CGRect? { layout?.zone }
 
@@ -320,8 +327,9 @@ final class EntryController: NSObject {
     private func stickDraft(_ text: String) {
         // Structuring arrives in stage 3; until then Return sticks the text as it is.
         let plan = PlainTextPlan.make(from: text, plainLineKind: tuning.newLineAfterTitleIsTodo ? .todo : .text)
+        let draftFrame = draft.frameOnScreen
         draft.close(animated: true)
-        stickers.stick(plan, rawInput: text)
+        stickers.stick(plan, rawInput: text, flyingFrom: draftFrame)
         stickers.pointerNeedsAttention()
     }
 

@@ -4,6 +4,7 @@
 import Foundation
 import Observation
 import QuartzCore
+import StickflowCore
 
 /// Every tunable number of the app lives here (spec rule 0.2).
 ///
@@ -112,6 +113,29 @@ final class Tuning {
     var draftFromPadStartScale: Double = 0.96
     var draftFromHotkeyStartScale: Double = 0.98
 
+    // MARK: Sticking (4.4) and peeling by the corner (4.10)
+
+    var flightDuration: Double = 0.36
+    /// How far the middle of the flight rises above the straight line.
+    var flightLift: Double = 60
+    var flightScale: Double = 1.03
+    var impactDuration: Double = 0.22
+    /// The squash at the moment of impact: 1.03 → this → 1.
+    var impactSquash: Double = 0.985
+    var airRingDuration: Double = 0.26
+    var airRingReach: Double = 10
+    var airRingOpacity: Double = 0.25
+    /// The square at the bottom right the sticker is peeled by.
+    var peelCornerSize: Double = 28
+    /// How far the corner is folded when the edit key is held, as a hint.
+    var peelCornerHint: Double = 9
+    var peelDistance: Double = 70
+    var peelSpeed: Double = 800
+    var peelGestureDuration: Double = 0.28
+    var peelRotation: Double = 8
+    var peelSnapBackDuration: Double = 0.4
+    var peelSnapBackBounce: Double = 0.2
+
     // MARK: Screen sharing (5.2)
 
     /// How often the app asks whether the screen is being captured.
@@ -173,6 +197,12 @@ struct MotionCurve: Sendable {
     let c1y: Float
     let c2x: Float
     let c2y: Float
+
+    /// How far along the animation is when `progress` of its time has passed,
+    /// for animations driven frame by frame.
+    func value(at progress: Double) -> Double {
+        CubicBezier(Double(c1x), Double(c1y), Double(c2x), Double(c2y)).value(at: progress)
+    }
 
     var timingFunction: CAMediaTimingFunction {
         CAMediaTimingFunction(controlPoints: c1x, c1y, c2x, c2y)

@@ -108,6 +108,9 @@ final class AppEnvironment {
         stickers.alsoNeedsPolling = { [weak self] location in
             self?.entry.needsPointer(at: location) ?? false
         }
+        stickers.peelTarget = { [weak self] in
+            self?.entry.padPoint
+        }
         stickers.onCaptureHidingChange = { [weak self] hidden in
             self?.entry.setSuppressed(hidden)
         }

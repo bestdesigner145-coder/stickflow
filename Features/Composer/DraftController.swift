@@ -47,6 +47,11 @@ final class DraftController: NSObject, NSTextViewDelegate {
         rootView.textView.string
     }
 
+    /// Where the draft is on screen.
+    var frameOnScreen: CGRect {
+        panel.frame
+    }
+
     private var width: CGFloat {
         switch preferences.sizeClass {
         case .small: CGFloat(tuning.widthSmall)
