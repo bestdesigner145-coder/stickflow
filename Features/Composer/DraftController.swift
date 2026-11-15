@@ -37,6 +37,36 @@ final class DraftController: NSObject, NSTextViewDelegate {
         rootView.textView.onSubmit = { [weak self] in self?.submit() }
         rootView.textView.onCancel = { [weak self] in self?.cancel() }
         rootView.stickButton.onClick = { [weak self] in self?.submit() }
+
+        // An empty draft must not hang around once the user has moved on.
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(panelDidResignKey(_:)), name: NSWindow.didResignKeyNotification, object: panel
+        )
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self, selector: #selector(activeSpaceDidChange(_:)), name: NSWorkspace.activeSpaceDidChangeNotification, object: nil
+        )
+    }
+
+    @objc private func panelDidResignKey(_ notification: Notification) {
+        attentionDidLeave()
+    }
+
+    @objc private func activeSpaceDidChange(_ notification: Notification) {
+        attentionDidLeave()
+    }
+
+    /// While on, losing the keyboard does not close the draft: a system dialog
+    /// of our own making (the microphone permission) is in front.
+    var keepsOpenWithoutFocus = false
+
+    /// The keyboard went to another window, or the user switched to another
+    /// desktop. An empty draft closes and leaves nothing behind. A draft with text
+    /// stays where it is, unless the Tuning switch says to put it away as a draft.
+    func attentionDidLeave() {
+        guard isOpen, !keepsOpenWithoutFocus else { return }
+        let isEmpty = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard isEmpty || tuning.draftWithTextClosesOnFocusLoss else { return }
+        cancel()
     }
 
     var isOpen: Bool {
@@ -113,11 +143,14 @@ final class DraftController: NSObject, NSTextViewDelegate {
     func close(animated: Bool) {
         guard panel.isVisible, !isClosing else { return }
         let duration = animated ? tuning.scaled(tuning.draftFromHotkeyDuration) : 0
+        // Set first: leaving the screen takes the keyboard away, and that must not
+        // be read as the user turning away from an open draft.
+        isClosing = true
         guard duration > 0 else {
             panel.orderOut(nil)
+            isClosing = false
             return
         }
-        isClosing = true
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = duration
             context.timingFunction = MotionCurve.easeOut.timingFunction

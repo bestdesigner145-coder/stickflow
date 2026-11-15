@@ -35,6 +35,19 @@ final class EntrySnapshotTests: XCTestCase {
         assertSnapshot(of: SnapshotRenderer.image(of: pad), as: SnapshotRenderer.strategy)
     }
 
+    /// Out of the edge the pad shows 96 of its 112 pt; the label must still break
+    /// between words only, in both languages.
+    func testPadLabelBreaksBetweenWords() {
+        for (name, label) in [("ru", "Записать задачи"), ("en", "Jot down tasks")] {
+            let pad = PadView(frame: NSRect(x: 0, y: 0, width: 112, height: 112))
+            pad.appearance = NSAppearance(named: .aqua)
+            pad.paper = .default
+            pad.label = label
+            pad.hiddenWidth = 16
+            assertSnapshot(of: SnapshotRenderer.image(of: pad), as: SnapshotRenderer.strategy, named: name)
+        }
+    }
+
     func testDraft() {
         for theme in Self.themes {
             for text in ["", "План на день\nДоделать экран кошелька\nСозвон с разработкой в три"] {

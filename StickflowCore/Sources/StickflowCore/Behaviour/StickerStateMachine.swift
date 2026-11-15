@@ -63,14 +63,26 @@ public struct StickerStateMachine: Equatable, Sendable {
         public var isNear: Bool
         public var isEditKeyDown: Bool
         public var isMouseDown: Bool
+        /// The sticker is inside the cursor's halo (spec 4.7): every sticker near
+        /// the cursor fades, not only the one under it.
+        public var isInHalo: Bool
         /// Monotonic time in seconds.
         public var time: TimeInterval
 
-        public init(isOver: Bool, isNear: Bool, isEditKeyDown: Bool, isMouseDown: Bool = false, time: TimeInterval) {
+        /// - Parameter isInHalo: defaults to `isOver`, i.e. a halo of no size.
+        public init(
+            isOver: Bool,
+            isNear: Bool,
+            isEditKeyDown: Bool,
+            isMouseDown: Bool = false,
+            isInHalo: Bool? = nil,
+            time: TimeInterval
+        ) {
             self.isOver = isOver
             self.isNear = isNear
             self.isEditKeyDown = isEditKeyDown
             self.isMouseDown = isMouseDown
+            self.isInHalo = isInHalo ?? isOver
             self.time = time
         }
     }
@@ -88,8 +100,10 @@ public struct StickerStateMachine: Equatable, Sendable {
 
     public private(set) var mode: Mode = .rest
 
-    /// When the cursor came to rest on the paper; drives the fade delay and the hint.
+    /// When the cursor's halo reached the sticker; drives the fade delay.
     private var hoverSince: TimeInterval?
+    /// When the cursor came onto the paper itself; drives the hint.
+    private var overSince: TimeInterval?
     /// When edit mode ends after the key was released or the cursor left.
     private var releaseDeadline: TimeInterval?
     private var wasNear = false
@@ -102,7 +116,7 @@ public struct StickerStateMachine: Equatable, Sendable {
     /// True while a timer is running or the sticker is in a state the pointer can end,
     /// so the caller must keep sending input even if the mouse is still.
     public var needsContinuousInput: Bool {
-        mode == .faded || mode == .editMode || hoverSince != nil || releaseDeadline != nil
+        mode == .faded || mode == .editMode || hoverSince != nil || overSince != nil || releaseDeadline != nil
     }
 
     /// Feeds the machine one look at the pointer.
@@ -127,7 +141,8 @@ public struct StickerStateMachine: Equatable, Sendable {
             releaseDeadline = deadline
             if input.time >= deadline {
                 releaseDeadline = nil
-                hoverSince = input.isOver ? input.time : nil
+                hoverSince = (input.isInHalo || input.isOver) ? input.time : nil
+                overSince = input.isOver ? input.time : nil
                 // The user has just used the key; no need to teach it again.
                 hintShownForThisHover = true
                 mode = .rest
@@ -141,22 +156,27 @@ public struct StickerStateMachine: Equatable, Sendable {
                 mode = .editMode
                 return Outcome(hidesHint: true)
             }
-            guard input.isOver else {
-                hoverSince = nil
+            // The hint is about the sticker under the cursor; the fade is about the halo.
+            if input.isOver {
+                overSince = overSince ?? input.time
+            } else {
+                overSince = nil
                 hintShownForThisHover = false
+            }
+            guard input.isInHalo || input.isOver else {
+                hoverSince = nil
                 mode = .rest
                 return Outcome()
             }
             let since = hoverSince ?? input.time
             hoverSince = since
-            let dwell = input.time - since
 
             if rules.fadeEnabled {
-                if mode == .rest, dwell >= rules.fadeDelay { mode = .faded }
+                if mode == .rest, input.time - since >= rules.fadeDelay { mode = .faded }
             } else {
                 mode = .rest
             }
-            if !input.isEditKeyDown, !hintShownForThisHover, dwell >= rules.hintDwell {
+            if let overSince, !input.isEditKeyDown, !hintShownForThisHover, input.time - overSince >= rules.hintDwell {
                 hintShownForThisHover = true
                 return Outcome(showsHint: true)
             }
@@ -167,6 +187,7 @@ public struct StickerStateMachine: Equatable, Sendable {
     /// The text took keyboard focus.
     public mutating func beginEditing() {
         hoverSince = nil
+        overSince = nil
         releaseDeadline = nil
         mode = .editing
     }
@@ -174,6 +195,7 @@ public struct StickerStateMachine: Equatable, Sendable {
     /// Editing is over; the sticker is click-through again.
     public mutating func endEditing() {
         hoverSince = nil
+        overSince = nil
         releaseDeadline = nil
         mode = .rest
     }

@@ -191,6 +191,7 @@ final class StickerRootView: NSView {
         guard let layer, let fold = PaperFold.make(paper: paper, corner: corner, pulledTo: target) else {
             layer?.mask = nil
             foldOverlay.setFlap(nil, color: .clear)
+            shadowView.keptShape = nil
             effectView.isHidden = false
             return
         }
@@ -204,7 +205,8 @@ final class StickerRootView: NSView {
             flipped ? point : CGPoint(x: point.x, y: height - point.y)
         }
         let path = CGMutablePath()
-        path.addRect(layer.bounds)
+        // Far beyond the view: the mask must cut the hole and nothing else.
+        path.addRect(layer.bounds.insetBy(dx: -4000, dy: -4000))
         path.addLines(between: fold.hole.map(inLayer))
         path.closeSubpath()
         let mask = (layer.mask as? CAShapeLayer) ?? CAShapeLayer()
@@ -216,12 +218,47 @@ final class StickerRootView: NSView {
         CATransaction.commit()
         layer.mask = mask
 
-        let dark = effectiveAppearance.isDark
-        let back = paperColorForFold.blended(withFraction: dark ? 0.12 : 0.07, of: dark ? .white : .black) ?? paperColorForFold
-        foldOverlay.setFlap(fold.flap.map { CGPoint(x: $0.x, y: height - $0.y) }, color: back)
+        foldOverlay.setFlap(fold.flap.map { CGPoint(x: $0.x, y: height - $0.y) }, color: foldBackColor)
+        // The shadow falls from the paper that is still there.
+        shadowView.keptShape = fold.kept.map { CGPoint(x: $0.x, y: height - $0.y) }
     }
 
     private var paperColorForFold = NSColor.white
+
+    /// The back of the sheet, seen where a corner is turned over.
+    var foldBackColor: NSColor {
+        let dark = effectiveAppearance.isDark
+        return paperColorForFold.blended(withFraction: dark ? 0.12 : 0.07, of: dark ? .white : .black) ?? paperColorForFold
+    }
+
+    /// A picture of the flat paper with everything on it, without the shadow and
+    /// without a folded corner, for the `EffectsOverlay`.
+    /// - Parameter scale: pixels per point of the screen it will be shown on.
+    func paperSnapshot(scale: CGFloat) -> CGImage? {
+        let pull = cornerPull
+        if pull != .zero { setCornerPull(.zero) }
+        defer {
+            if pull != .zero { setCornerPull(pull) }
+        }
+        layoutSubtreeIfNeeded()
+        displayIfNeeded()
+        let paper = paperRect
+        guard paper.width > 0, paper.height > 0, let bitmap = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: Int((paper.width * scale).rounded()),
+            pixelsHigh: Int((paper.height * scale).rounded()),
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        ) else { return nil }
+        bitmap.size = paper.size
+        cacheDisplay(in: paper, to: bitmap)
+        return bitmap.cgImage
+    }
 
     /// The ring of "air" pushed out when a sticker lands (spec 4.4).
     func playAirRing(reach: CGFloat, opacity: Float, duration: TimeInterval) {

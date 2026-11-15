@@ -151,6 +151,8 @@ struct TuningPanelView: View {
     private var fadeSection: some View {
         Section {
             SliderRow(title: "Faded opacity", value: $tuning.fadedOpacity, range: 0.05...1, onChange: onTuningChange)
+            SliderRow(title: "Halo radius, pt", value: $tuning.haloRadius, range: 0...300, onChange: onTuningChange)
+            SliderRow(title: "Halo: full fade within, pt", value: $tuning.haloCore, range: 0...120, onChange: onTuningChange)
             SliderRow(title: "Fade out, s", value: $tuning.fadeOutDuration, range: 0...0.6, onChange: onTuningChange)
             SliderRow(title: "Fade in, s", value: $tuning.fadeInDuration, range: 0...0.6, onChange: onTuningChange)
             SliderRow(title: "Text opacity at rest", value: $tuning.restTextOpacity, range: 0.3...1,
@@ -217,6 +219,8 @@ struct TuningPanelView: View {
                       isOn: $tuning.spacesBehaviorTransient, onChange: onTuningChange)
             ToggleRow(title: "Zone: reject fast entry",
                       isOn: $tuning.zoneRejectsFastEntry, onChange: onTuningChange)
+            ToggleRow(title: "Draft with text closes when focus is lost (kept as a draft)",
+                      isOn: $tuning.draftWithTextClosesOnFocusLoss, onChange: onTuningChange)
             ToggleRow(title: "⌘Z restores a peeled sticker while the toast is up",
                       isOn: $tuning.undoPeelUsesCommandZ, onChange: onTuningChange)
         } header: {

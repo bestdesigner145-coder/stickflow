@@ -242,6 +242,26 @@ enum SelfCheck {
             controller.pointerDidUpdate(sample(outside, at: 3.0))
             await pause(0.3)
 
+            // 5a. The cursor's halo (spec 4.7): a sticker near the cursor fades too, less with distance.
+            let paper = controller.paperFrame
+            let middle = (tuning.haloCore + tuning.haloRadius) / 2
+            controller.pointerDidUpdate(sample(CGPoint(x: paper.minX - middle, y: paper.midY), at: 3.5))
+            check(controller.mode == .faded, "a sticker inside the cursor's halo fades without the cursor on it")
+            check(controller.panel.ignoresMouseEvents, "a sticker faded by the halo still ignores the mouse")
+            await pause(0.35)
+            let halfFaded = (1 + tuning.fadedOpacity) / 2
+            check(abs(Double(controller.panel.alphaValue) - halfFaded) < 0.03, "half way into the halo it is half faded (alpha \(controller.panel.alphaValue), expected \(halfFaded))")
+            controller.pointerDidUpdate(sample(CGPoint(x: paper.minX - tuning.haloCore + 4, y: paper.midY), at: 3.6))
+            await pause(0.35)
+            check(abs(Double(controller.panel.alphaValue) - tuning.fadedOpacity) < 0.02, "close by, the opacity follows the cursor down to \(tuning.fadedOpacity) (is \(controller.panel.alphaValue))")
+            controller.pointerDidUpdate(sample(CGPoint(x: paper.minX - middle, y: paper.midY), key: true, at: 3.7))
+            check(controller.mode == .rest, "the edit key switches the halo off")
+            controller.pointerDidUpdate(sample(CGPoint(x: paper.minX - tuning.haloRadius - 2, y: paper.midY), at: 3.8))
+            check(controller.mode == .rest, "beyond the halo the sticker is at rest")
+            controller.pointerDidUpdate(sample(outside, at: 3.9))
+            await pause(0.3)
+            check(abs(Double(controller.panel.alphaValue) - 1) < 0.02, "away from the cursor the sticker is opaque again (alpha \(controller.panel.alphaValue))")
+
             // 6. Ticking a task outside editing is saved.
             textView.toggleDone(line: 5)
             await pause(0.7) // debounced save
@@ -307,8 +327,10 @@ enum SelfCheck {
                 note("long sticker scrolled to the end: offset \(long.rootView.scrollOffset)")
                 await pause(0.2)
                 snapshot(long, name: "6c-long-scrolled-end")
-                long.pointerDidUpdate(sample(outside, at: 11.0))
-                long.pointerDidUpdate(sample(outside, at: 11.0 + tuning.editKeyReleaseGrace + 0.01))
+                // Well beyond the cursor's halo of this sticker.
+                let clear = CGPoint(x: long.paperFrame.minX - 400, y: long.paperFrame.minY - 400)
+                long.pointerDidUpdate(sample(clear, at: 11.0))
+                long.pointerDidUpdate(sample(clear, at: 11.0 + tuning.editKeyReleaseGrace + 0.01))
                 check(long.mode == .rest, "the long sticker returns to rest")
                 await pause(0.5)
                 check(long.rootView.scrollOffset < 0.5, "at rest the long sticker shows its beginning again (offset \(long.rootView.scrollOffset))")
@@ -515,8 +537,13 @@ enum SelfCheck {
                 draft.submit()
                 await pause(0.12)
                 check(stickers.controllers.last?.isAirborne == true, "the new sticker flies from the draft to its place")
+                // The flight is a picture in the overlay; the window itself does not move (fix G5).
+                check(stickers.controllers.last?.isDrawnInOverlay == true && stickers.effectsOverlay.isVisible, "it flies as a picture in the effects overlay")
+                check(stickers.controllers.last?.panel.isVisible == false, "its own window waits for the landing")
                 await pause(1.0)
                 check(stickers.controllers.last?.isAirborne == false, "the flight ends")
+                check(stickers.controllers.last?.panel.isVisible == true, "the window appears where the picture landed")
+                check(stickers.effectsOverlay.spriteCount == 0 && !stickers.effectsOverlay.isVisible, "and the overlay is gone (\(stickers.effectsOverlay.spriteCount) left)")
                 check(!draft.isOpen, "sticking closes the draft")
                 check(NSApp.keyWindow == nil, "the keyboard goes back after the draft closes")
                 check(stickers.controllers.count == stickersBefore + 1, "the draft becomes a sticker")
@@ -543,6 +570,39 @@ enum SelfCheck {
                 do {
                     let drafts = try environment.repository.stickers(status: .draft)
                     check(drafts.contains { $0.title == "Отложенное" }, "a closed draft is kept (\(drafts.map(\.title)))")
+                } catch {
+                    check(false, "drafts can be read (\(error))")
+                }
+
+                // An empty draft closes itself when the user turns away (fix G3).
+                do {
+                    let draftsBefore = try environment.repository.stickers(status: .draft).count
+                    entry.toggleDraft()
+                    await pause(0.4)
+                    check(draft.isOpen, "the hotkey opens an empty draft")
+                    NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.activeSpaceDidChangeNotification, object: nil)
+                    await pause(0.4)
+                    check(!draft.isOpen, "an empty draft closes when the desktop changes")
+                    entry.toggleDraft()
+                    await pause(0.4)
+                    NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: draft.rootView.window)
+                    await pause(0.4)
+                    check(!draft.isOpen, "an empty draft closes when the keyboard goes elsewhere")
+                    try check(environment.repository.stickers(status: .draft).count == draftsBefore, "an empty draft leaves nothing behind")
+
+                    entry.toggleDraft()
+                    await pause(0.4)
+                    draft.rootView.textView.insertText("Недописанное", replacementRange: draft.rootView.textView.selectedRange())
+                    draft.attentionDidLeave()
+                    await pause(0.4)
+                    check(draft.isOpen && draft.text == "Недописанное", "a draft with text stays when focus is lost")
+                    tuning.draftWithTextClosesOnFocusLoss = true
+                    draft.attentionDidLeave()
+                    await pause(0.4)
+                    tuning.draftWithTextClosesOnFocusLoss = false
+                    check(!draft.isOpen, "with the Tuning switch a draft with text closes when focus is lost")
+                    let kept = try environment.repository.stickers(status: .draft)
+                    check(kept.contains { $0.title == "Недописанное" }, "and is kept as a draft (\(kept.map(\.title)))")
                 } catch {
                     check(false, "drafts can be read (\(error))")
                 }
@@ -578,6 +638,11 @@ enum SelfCheck {
                 var released = pull(by: 3, steps: 10, every: 0.05)
                 check(target.isPeeling, "the corner can be pulled")
                 await pause(0.3)
+                // The pulled sticker is a picture in the overlay; its window is hidden,
+                // so nothing of it is left where the paper has gone (fixes G1, G2).
+                check(target.isDrawnInOverlay && stickers.effectsOverlay.isVisible, "the pulled sticker is drawn in the effects overlay")
+                check(Double(target.panel.alphaValue) < 0.01, "its own window is invisible meanwhile (alpha \(target.panel.alphaValue))")
+                check(target.visibleFold != nil, "the corner is folded over")
                 if let screen = environment.displays.menuBarScreen {
                     _ = captureScreen(target.panel.frame, on: screen, name: "14-screen-fold")
                 }
@@ -585,20 +650,31 @@ enum SelfCheck {
                 await pause(1.0)
                 check(!target.isPeeling && !target.isClosed, "pulled 42 pt and let go slowly, the corner springs back")
                 check(stickers.controllers.count == countBefore, "and the sticker stays")
+                check(!target.isDrawnInOverlay && abs(Double(target.panel.alphaValue) - 1) < 0.02, "the window is back in place of the picture (alpha \(target.panel.alphaValue))")
+                check(!stickers.effectsOverlay.isVisible, "and the overlay is gone")
 
-                // A long pull: past 70 pt the sticker comes off.
+                // A long pull, past the top of the sheet: the folded paper leaves the
+                // sticker's own rectangle and is not cut off; past 70 pt the sticker comes off.
                 moment = ProcessInfo.processInfo.systemUptime
                 target.beginPeel(at: corner, time: moment)
-                released = pull(by: 9, steps: 10, every: 0.03)
+                let reach = target.paperFrame.height + 60
+                released = pull(by: reach / 10, steps: 10, every: 0.03)
                 await pause(0.2)
+                if let fold = target.visibleFold {
+                    let top = fold.flap.map(\.y).min() ?? 0
+                    check(top < -40, "the folded paper reaches \(Int(-top)) pt beyond the sheet, farther than the old window margin")
+                } else {
+                    check(false, "a long pull folds the sheet")
+                }
                 if let screen = environment.displays.menuBarScreen {
-                    _ = captureScreen(target.panel.frame, on: screen, name: "14b-screen-fold-deep")
+                    _ = captureScreen(target.panel.frame.insetBy(dx: -60, dy: -60), on: screen, name: "14b-screen-fold-deep")
                 }
                 target.endPeel(at: released, time: moment + 0.2)
-                check(stickers.controllers.count == countBefore - 1, "pulled 127 pt, the sticker comes off")
+                check(stickers.controllers.count == countBefore - 1, "pulled \(Int(reach * 1.414)) pt, the sticker comes off")
                 check(stickers.isUndoToastVisible, "and the toast offers to bring it back")
                 await pause(0.7)
                 check(target.isClosed, "the torn-off sticker flies away and its window closes")
+                check(stickers.effectsOverlay.spriteCount == 0, "nothing is left in the overlay")
 
                 // A short but quick jerk is enough too.
                 if let quick = stickers.controllers.last {

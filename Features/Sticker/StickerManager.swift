@@ -11,6 +11,15 @@ final class StickerManager: NSObject {
     var onError: ((String, Error) -> Void)?
     /// Where a peeled sticker flies to: the pad at the call edge (spec 4.10).
     var peelTarget: (() -> CGPoint?)?
+
+    /// Where stickers fly and are peeled as pictures (spec 6.7).
+    let effectsOverlay = EffectsOverlay()
+
+    /// Frame of the screen the overlay should cover for a sticker at `frame`.
+    func screenFrame(around frame: CGRect) -> CGRect? {
+        (displays.screen(containing: frame) ?? displays.menuBarScreen)?.frame
+    }
+
     /// Every pointer sample, for the call zone at the screen edge.
     var onPointerSample: ((PointerSample) -> Void)?
     /// Lets the call zone keep the pointer polled when no sticker needs it.

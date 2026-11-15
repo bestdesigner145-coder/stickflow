@@ -169,6 +169,8 @@ final class EntryController: NSObject {
         padView.paper = preferences.defaultColor
         padView.edge = layout.edge.side
         padView.hiddenWidth = max(CGFloat(tuning.padSize - tuning.padOpenReach), 0)
+        padView.labelFontSize = CGFloat(tuning.padLabelFontSize)
+        padView.minimumLabelFontSize = CGFloat(tuning.padLabelMinFontSize)
 
         let tabSize = CGSize(width: tuning.tabWidth, height: tuning.tabHeight)
         let tabX = layout.edge.side == .right ? layout.screen.frame.maxX - tabSize.width : layout.screen.frame.minX

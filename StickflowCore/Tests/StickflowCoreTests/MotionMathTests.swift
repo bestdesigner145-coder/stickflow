@@ -49,6 +49,21 @@ final class MotionMathTests: XCTestCase {
         XCTAssertEqual(Spring(duration: 0, bounce: 0).settlingTime, 0)
     }
 
+    func testFlightPathIsTheBezierCurveOfItsControlPoint() {
+        let start = CGPoint(x: 900, y: 300)
+        let end = CGPoint(x: 1200, y: 700)
+        let control = FlightPath.control(from: start, to: end, lift: 60)
+        XCTAssertEqual(control, CGPoint(x: 1050, y: 560))
+        for progress in [0.1, 0.25, 0.5, 0.8] {
+            let inverse = 1 - progress
+            let expectedX = inverse * inverse * 900 + 2 * inverse * progress * 1050 + progress * progress * 1200
+            let expectedY = inverse * inverse * 300 + 2 * inverse * progress * 560 + progress * progress * 700
+            let point = FlightPath.point(from: start, to: end, progress: progress, lift: 60)
+            XCTAssertEqual(Double(point.x), expectedX, accuracy: 0.0001)
+            XCTAssertEqual(Double(point.y), expectedY, accuracy: 0.0001)
+        }
+    }
+
     func testFlightPathStartsEndsAndRises() {
         let start = CGPoint(x: 0, y: 0)
         let end = CGPoint(x: 200, y: 100)

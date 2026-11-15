@@ -299,6 +299,21 @@ final class PlainTextPlanTests: XCTestCase {
         XCTAssertEqual(plan.blocks.map(\.text), ["первая", "вторая"])
     }
 
+    func testLabelShrinksUntilItsLongestWordFits() {
+        XCTAssertEqual(LabelFit.words(of: "Записать задачи"), ["Записать", "задачи"])
+        XCTAssertEqual(LabelFit.words(of: "Jot  down\ntasks"), ["Jot", "down", "tasks"])
+        // It fits: the size stays.
+        XCTAssertEqual(LabelFit.fontSize(base: 20, minimum: 13, widestWord: 60, available: 64), 20)
+        // «Записать» is 69 pt wide at 20 pt and the sheet shows 64 pt.
+        let fitted = LabelFit.fontSize(base: 20, minimum: 13, widestWord: 69, available: 64)
+        XCTAssertEqual(fitted, 18.5)
+        XCTAssertLessThanOrEqual(69 * fitted / 20, 64)
+        // Never below the minimum, never a division by zero.
+        XCTAssertEqual(LabelFit.fontSize(base: 20, minimum: 13, widestWord: 400, available: 64), 13)
+        XCTAssertEqual(LabelFit.fontSize(base: 20, minimum: 13, widestWord: 0, available: 64), 20)
+        XCTAssertEqual(LabelFit.fontSize(base: 20, minimum: 13, widestWord: 69, available: 0), 20)
+    }
+
     func testEmptyInputGivesNothing() {
         XCTAssertTrue(PlainTextPlan.make(from: "  \n\n\t").isEmpty)
         XCTAssertTrue(PlainTextPlan.make(from: "").isEmpty)

@@ -80,12 +80,18 @@ public struct Spring: Equatable, Sendable {
 
 /// The arc a sticker flies along from the draft to its place (spec 4.4).
 public enum FlightPath {
+    /// The control point of the arc, a quadratic Bézier curve; with it the same
+    /// path can be handed to Core Animation.
+    public static func control(from start: CGPoint, to end: CGPoint, lift: CGFloat) -> CGPoint {
+        CGPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 + lift)
+    }
+
     /// - Parameters:
     ///   - progress: 0 at the start, 1 at the end.
     ///   - lift: how far the middle of the path rises above the straight line, in points.
     public static func point(from start: CGPoint, to end: CGPoint, progress: Double, lift: CGFloat) -> CGPoint {
         let clamped = CGFloat(min(max(progress, 0), 1))
-        let control = CGPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 + lift)
+        let control = Self.control(from: start, to: end, lift: lift)
         let inverse = 1 - clamped
         return CGPoint(
             x: inverse * inverse * start.x + 2 * inverse * clamped * control.x + clamped * clamped * end.x,

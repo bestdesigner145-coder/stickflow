@@ -73,15 +73,31 @@ final class ShadowHostView: NSView {
         CATransaction.commit()
     }
 
+    /// The part of the paper that lies flat while a corner is folded, in this
+    /// view's layer coordinates (y grows upwards); `nil` for the whole sheet.
+    /// The shadow falls from what is there, not from the sheet as it was.
+    var keptShape: [CGPoint]? {
+        didSet {
+            if keptShape != oldValue { updatePath() }
+        }
+    }
+
     private func updatePath() {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        shadowLayer.shadowPath = CGPath(
-            roundedRect: paperRect,
-            cornerWidth: cornerRadius,
-            cornerHeight: cornerRadius,
-            transform: nil
-        )
+        if let keptShape, keptShape.count >= 3 {
+            let path = CGMutablePath()
+            path.addLines(between: keptShape)
+            path.closeSubpath()
+            shadowLayer.shadowPath = path
+        } else {
+            shadowLayer.shadowPath = CGPath(
+                roundedRect: paperRect,
+                cornerWidth: cornerRadius,
+                cornerHeight: cornerRadius,
+                transform: nil
+            )
+        }
         CATransaction.commit()
     }
 }

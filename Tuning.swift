@@ -43,6 +43,10 @@ final class Tuning {
     var restTextOpacity: Double = 0.92
     var doneTextOpacity: Double = 0.45
     var fadedOpacity: Double = 0.2
+    /// The cursor's halo: every sticker within this distance of the cursor fades,
+    /// fully within `haloCore`, less and less towards the rim.
+    var haloRadius: Double = 140
+    var haloCore: Double = 40
     // The fade starts the moment the cursor is over the sticker: no pause before
     // an animation, either at once or smoothly (spec 4.7, 6.7).
     var fadeOutDuration: Double = 0.180
@@ -97,6 +101,9 @@ final class Tuning {
     var tabHeight: Double = 56
     var tabOpacity: Double = 0.35
     var padSize: Double = 112
+    /// The label on the pad; it shrinks down to the minimum until its longest word fits.
+    var padLabelFontSize: Double = 20
+    var padLabelMinFontSize: Double = 13
     var padPeekReach: Double = 28
     var padOpenReach: Double = 96
     var padPeekRotation: Double = -6
@@ -116,10 +123,17 @@ final class Tuning {
 
     // MARK: Sticking (4.4) and peeling by the corner (4.10)
 
-    var flightDuration: Double = 0.36
+    /// Spec 6.7: 280 ms, easeOut: a quick start and a soft landing.
+    var flightDuration: Double = 0.28
+    /// A sticker that flies or is peeled is a picture in the effects overlay. For
+    /// this long the picture and the sticker's own window overlap when one takes
+    /// over from the other, so that there is never a frame with neither.
+    var spriteHandoverDuration: Double = 0.06
     /// How far the middle of the flight rises above the straight line.
     var flightLift: Double = 60
     var flightScale: Double = 1.03
+    /// How long the sticker takes to grow to that scale as it lifts off.
+    var flightLiftOffDuration: Double = 0.1
     var impactDuration: Double = 0.22
     /// The squash at the moment of impact: 1.03 → this → 1.
     var impactSquash: Double = 0.985
@@ -186,6 +200,10 @@ final class Tuning {
     /// On: a cursor that flew into the zone is ignored until it leaves and comes
     /// back slowly. Off: it may stop in the zone and still call the pad.
     var zoneRejectsFastEntry = false
+    /// What a draft with text does when the keyboard goes elsewhere or the desktop
+    /// changes. Off: it stays on screen. On: it closes and is kept as a draft, the
+    /// way Esc does. An empty draft always closes.
+    var draftWithTextClosesOnFocusLoss = false
     /// On (spec 4.10): ⌘Z brings a peeled sticker back while its toast is up. The
     /// key is taken from the app in front for those few seconds, or until the next click.
     var undoPeelUsesCommandZ = true

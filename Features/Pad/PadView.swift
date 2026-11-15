@@ -25,6 +25,20 @@ final class PadView: NSView {
         didSet { needsDisplay = true }
     }
 
+    /// The handwritten words on the top sheet.
+    var label: String = L10n.padLabel {
+        didSet { needsDisplay = true }
+    }
+
+    /// Size of the label; it shrinks until the longest word fits the sheet.
+    var labelFontSize: CGFloat = 20 {
+        didSet { needsDisplay = true }
+    }
+
+    var minimumLabelFontSize: CGFloat = 13 {
+        didSet { needsDisplay = true }
+    }
+
     private(set) var isHovered = false {
         didSet { needsDisplay = true }
     }
@@ -156,12 +170,23 @@ final class PadView: NSView {
     }
 
     private func drawLabel(in rect: NSRect) {
+        // A line may break between words only, so the longest word sets the size.
+        let baseFont = HandFont.font(size: labelFontSize)
+        let widestWord = LabelFit.words(of: label)
+            .map { ceil(NSAttributedString(string: $0, attributes: [.font: baseFont]).size().width) }
+            .max() ?? 0
+        let size = LabelFit.fontSize(
+            base: Double(labelFontSize),
+            minimum: Double(minimumLabelFontSize),
+            widestWord: Double(widestWord),
+            available: Double(rect.width) - 2
+        )
         let style = NSMutableParagraphStyle()
         style.alignment = .center
         style.lineBreakMode = .byWordWrapping
-        style.maximumLineHeight = 21
-        let text = NSAttributedString(string: L10n.padLabel, attributes: [
-            .font: HandFont.font(size: 20),
+        style.maximumLineHeight = CGFloat(size) + 1
+        let text = NSAttributedString(string: label, attributes: [
+            .font: HandFont.font(size: CGFloat(size)),
             .foregroundColor: paper.textColor(alpha: 0.72),
             .paragraphStyle: style,
         ])

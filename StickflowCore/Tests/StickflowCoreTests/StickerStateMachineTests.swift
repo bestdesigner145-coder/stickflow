@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 Stickflow contributors
 
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 @testable import StickflowCore
 import XCTest
 
@@ -178,6 +181,61 @@ final class StickerStateMachineTests: XCTestCase {
         _ = machine.pointerMoved(over(at: 1.2), rules: rules)
         XCTAssertEqual(machine.mode, .rest)
         XCTAssertFalse(machine.pointerMoved(over(at: 5), rules: rules).showsHint)
+    }
+
+    func testHaloFadesAStickerTheCursorIsOnlyNear() {
+        var machine = StickerStateMachine()
+        let noDelay = StickerStateMachine.Rules()
+        let nearby = Input(isOver: false, isNear: false, isEditKeyDown: false, isInHalo: true, time: 0)
+        XCTAssertFalse(machine.pointerMoved(nearby, rules: noDelay).showsHint)
+        XCTAssertEqual(machine.mode, .faded, "the halo reaches it, so it fades")
+        XCTAssertTrue(machine.needsContinuousInput)
+
+        // The hint is for the sticker under the cursor only.
+        let later = Input(isOver: false, isNear: false, isEditKeyDown: false, isInHalo: true, time: 5)
+        XCTAssertFalse(machine.pointerMoved(later, rules: noDelay).showsHint)
+
+        _ = machine.pointerMoved(away(at: 6), rules: noDelay)
+        XCTAssertEqual(machine.mode, .rest)
+        XCTAssertFalse(machine.needsContinuousInput)
+    }
+
+    func testHintCountsTimeOverThePaperNotInTheHalo() {
+        var machine = StickerStateMachine()
+        let noDelay = StickerStateMachine.Rules()
+        _ = machine.pointerMoved(Input(isOver: false, isNear: false, isEditKeyDown: false, isInHalo: true, time: 0), rules: noDelay)
+        _ = machine.pointerMoved(Input(isOver: false, isNear: false, isEditKeyDown: false, isInHalo: true, time: 3), rules: noDelay)
+        // Only now the cursor comes onto the paper.
+        XCTAssertFalse(machine.pointerMoved(over(at: 3.1), rules: noDelay).showsHint)
+        XCTAssertFalse(machine.pointerMoved(over(at: 4.0), rules: noDelay).showsHint)
+        XCTAssertTrue(machine.pointerMoved(over(at: 4.2), rules: noDelay).showsHint)
+    }
+
+    func testHaloOpacityByDistance() {
+        let halo = HaloFade()
+        XCTAssertEqual(halo.opacity(distance: 0), 0.2)
+        XCTAssertEqual(halo.opacity(distance: 40), 0.2)
+        XCTAssertEqual(halo.opacity(distance: 140), 1)
+        XCTAssertEqual(halo.opacity(distance: 500), 1)
+        XCTAssertEqual(halo.opacity(distance: 90), 0.6, accuracy: 0.0001, "half way is half faded")
+        var previous = 0.0
+        for distance in stride(from: 0.0, through: 150, by: 5) {
+            let value = halo.opacity(distance: distance)
+            XCTAssertGreaterThanOrEqual(value, previous, "farther is never more faded")
+            previous = value
+        }
+        XCTAssertTrue(halo.reaches(distance: 139))
+        XCTAssertFalse(halo.reaches(distance: 140))
+        // A halo no wider than its core switches off cleanly.
+        XCTAssertEqual(HaloFade(radius: 40, fullFadeWithin: 40).opacity(distance: 41), 1)
+    }
+
+    func testDistanceToASticker() {
+        let rect = CGRect(x: 100, y: 100, width: 200, height: 100)
+        XCTAssertEqual(HaloFade.distance(from: CGPoint(x: 150, y: 150), to: rect), 0)
+        XCTAssertEqual(HaloFade.distance(from: CGPoint(x: 60, y: 150), to: rect), 40)
+        XCTAssertEqual(HaloFade.distance(from: CGPoint(x: 150, y: 230), to: rect), 30)
+        XCTAssertEqual(HaloFade.distance(from: CGPoint(x: 330, y: 240), to: rect), 50, accuracy: 0.0001)
     }
 
     func testEditingIgnoresThePointerUntilItEnds() {

@@ -32,11 +32,18 @@ final class StickerController: NSObject {
     private(set) var isLeaving = false
     private var isDragging = false
     private var isMenuOpen = false
+    /// How opaque the cursor's halo leaves this sticker while it is faded (spec 4.7).
+    private var haloOpacity = 1.0
     /// Flying from the draft to its place (spec 4.4).
     private(set) var isAirborne = false
     private let motion = FrameAnimator()
+    /// Draws this sticker as a picture in the effects overlay while it flies or is
+    /// peeled; its own window is invisible meanwhile.
+    private let standIn: StickerStandIn
     /// The corner is being pulled (spec 4.10).
     private(set) var isPeeling = false
+    /// The pull was started by a real mouse button, so letting it go ends it.
+    private var peelFollowsMouseButton = false
     private var peelStartMouse = CGPoint.zero
     private var peelTrail: [(point: CGPoint, time: TimeInterval)] = []
     private var peelPull = CGSize.zero
@@ -52,8 +59,11 @@ final class StickerController: NSObject {
         self.tuning = tuning
         self.preferences = preferences
         self.clock = clock
-        panel = StickerPanel.make()
-        rootView = StickerRootView(frame: NSRect(x: 0, y: 0, width: 320, height: 200))
+        let panel = StickerPanel.make()
+        let rootView = StickerRootView(frame: NSRect(x: 0, y: 0, width: 320, height: 200))
+        self.panel = panel
+        self.rootView = rootView
+        standIn = StickerStandIn(panel: panel, rootView: rootView, tuning: tuning, preferences: preferences)
         super.init()
 
         panel.contentView = rootView
@@ -118,6 +128,7 @@ final class StickerController: NSObject {
         settleFlight()
         motion.cancel()
         isPeeling = false
+        peelFollowsMouseButton = false
         isLeaving = true
         removeClickMonitors()
         cancelIdleTimer()
@@ -132,39 +143,42 @@ final class StickerController: NSObject {
         let moving = byGesture ? tuning.peelGestureDuration : tuning.peelDuration
         let duration = tuning.scaled(reduceMotion ? tuning.reducedMotionFade : moving)
         let curve: MotionCurve = reduceMotion ? .ease : .easeInOut
-        let destination: NSRect?
-        if !reduceMotion, let target {
-            let turn = byGesture ? CGFloat(tuning.peelRotation) * (turnsLeft ? 1 : -1) : 0
-            rootView.animateScale(
-                from: 1,
-                to: CGFloat(tuning.peelEndScale),
-                rotation: turn,
-                duration: duration,
-                curve: curve,
-                keepsFinalState: true
-            )
-            destination = panel.frame.offsetBy(dx: target.x - panel.frame.midX, dy: target.y - panel.frame.midY)
-        } else {
-            destination = nil
+
+        // The picture flies away, not the window: it keeps its folded corner and
+        // moves on the GPU. A sticker torn off by its corner is a picture already.
+        let wasPicture = standIn.isUp
+        if !wasPicture, !reduceMotion, target != nil, duration > 0, let overlay = manager?.effectsOverlay {
+            _ = showStandIn(in: overlay)
         }
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = duration
-            context.timingFunction = curve.timingFunction
-            if let destination {
-                panel.animator().setFrame(destination, display: false)
-            }
-            panel.animator().alphaValue = 0
-        }, completionHandler: { [self] in
-            MainActor.assumeIsolated {
-                self.close()
-            }
-        })
+        guard standIn.isUp, duration > 0 else {
+            standIn.handBack(dissolve: 0)
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = duration
+                context.timingFunction = curve.timingFunction
+                panel.animator().alphaValue = 0
+            }, completionHandler: { [self] in
+                MainActor.assumeIsolated {
+                    self.close()
+                }
+            })
+            return
+        }
+        standIn.hideWindow(atOnce: wasPicture)
+        standIn.flyAway(
+            to: reduceMotion ? nil : target,
+            endScale: tuning.peelEndScale,
+            turn: byGesture ? tuning.peelRotation * (turnsLeft ? 1 : -1) : 0,
+            duration: duration,
+            curve: curve,
+            completion: { [self] in self.close() }
+        )
     }
 
     func close() {
         guard !isClosed else { return }
         isClosed = true
         motion.cancel()
+        standIn.reset()
         removeClickMonitors()
         cancelIdleTimer()
         rootView.delegate = nil
@@ -279,7 +293,8 @@ final class StickerController: NSObject {
         let restPaperOpacity = reduceTransparency ? 1.0 : preferences.paperOpacity
         let paperOpacity = isLifted ? 1.0 : restPaperOpacity
         let textOpacity = isLifted ? 1.0 : tuning.restTextOpacity
-        let windowAlpha = mode == .faded ? tuning.fadedOpacity : 1.0
+        // While the sprite stands in for the window, the window stays invisible.
+        let windowAlpha = standIn.hidesWindow ? 0 : (mode == .faded ? haloOpacity : 1.0)
 
         let baseDuration: Double
         if mode == .faded {
@@ -318,20 +333,15 @@ final class StickerController: NSObject {
 
     /// The shadow for the current state and theme (spec 6.2).
     private var shadowSpec: ShadowSpec {
-        let isLifted = mode == .editMode || mode == .editing || isAirborne
+        shadowSpec(lifted: mode == .editMode || mode == .editing || isAirborne)
+    }
+
+    private func shadowSpec(lifted: Bool) -> ShadowSpec {
         let darkBoost = rootView.effectiveAppearance.isDark ? tuning.darkShadowMultiplier : 1.0
-        if isLifted {
-            return ShadowSpec(
-                offsetY: CGFloat(tuning.liftedShadowOffset),
-                blur: CGFloat(tuning.liftedShadowBlur),
-                opacity: CGFloat(min(tuning.liftedShadowOpacity * darkBoost, 1))
-            )
-        }
-        return ShadowSpec(
-            offsetY: CGFloat(tuning.restShadowOffset),
-            blur: CGFloat(tuning.restShadowBlur),
-            opacity: CGFloat(min(tuning.restShadowOpacity * darkBoost, 1))
-        )
+        let offset = lifted ? tuning.liftedShadowOffset : tuning.restShadowOffset
+        let blur = lifted ? tuning.liftedShadowBlur : tuning.restShadowBlur
+        let opacity = lifted ? tuning.liftedShadowOpacity : tuning.restShadowOpacity
+        return ShadowSpec(offsetY: CGFloat(offset), blur: CGFloat(blur), opacity: CGFloat(min(opacity * darkBoost, 1)))
     }
 
     // MARK: Sticking (spec 4.4)
@@ -347,50 +357,48 @@ final class StickerController: NSObject {
             show(animated: true)
             return
         }
-        let margin = rootView.metrics.margin
-        let destination = panel.frame.origin
-        let paperTopLeft = CGPoint(x: start.minX, y: start.maxY)
-        let origin = CGPoint(x: paperTopLeft.x - margin, y: paperTopLeft.y - panel.frame.height + margin)
-
+        // The window does not move. A picture of the sticker flies in the overlay
+        // on the GPU, and the window appears in its place the moment it lands.
         isAirborne = true
         applyMode(from: nil, animated: false)
-        panel.setFrameOrigin(origin)
-        panel.alphaValue = 1
-        panel.orderFrontRegardless()
-        rootView.animateScale(
-            from: 1,
-            to: CGFloat(tuning.flightScale),
-            duration: min(duration, tuning.scaled(0.1)),
-            curve: .easeOut,
-            keepsFinalState: true
+        let paper = paperFrame
+        guard let overlay = manager?.effectsOverlay, showStandIn(in: overlay) else {
+            land(withImpact: false)
+            return
+        }
+        standIn.fly(
+            from: CGPoint(x: start.minX + paper.width / 2, y: start.maxY - paper.height / 2),
+            to: CGPoint(x: paper.midX, y: paper.midY),
+            lift: CGFloat(tuning.flightLift),
+            scale: CGFloat(tuning.flightScale),
+            duration: duration,
+            completion: { [weak self] in
+                // A flight that was settled early has landed already.
+                guard let self, self.isAirborne else { return }
+                self.land(withImpact: true)
+            }
         )
-        let lift = CGFloat(tuning.flightLift)
-        motion.run(duration: duration, step: { [weak self] elapsed in
-            guard let self else { return }
-            let progress = MotionCurve.easeInOut.value(at: elapsed / duration)
-            self.panel.setFrameOrigin(FlightPath.point(from: origin, to: destination, progress: progress, lift: lift))
-        }, completion: { [weak self] in
-            self?.land(at: destination)
-        })
     }
 
     /// Ends a flight at once: the sticker is in its place, without the impact
     /// (spec 6.7: any action of the user finishes an animation).
     func settleFlight() {
         guard isAirborne else { return }
-        isAirborne = false // `land` then skips the impact
-        motion.finish()
+        land(withImpact: false)
     }
 
-    private func land(at destination: CGPoint) {
-        let withImpact = isAirborne
+    /// The flight is over: the window appears where the picture has arrived.
+    private func land(withImpact: Bool) {
         isAirborne = false
-        panel.setFrameOrigin(destination)
-        guard withImpact else {
+        if !withImpact {
             rootView.removeScaleAnimation()
             applyMode(from: nil, animated: false)
-            return
         }
+        panel.alphaValue = 1
+        panel.orderFrontRegardless()
+        // The picture dissolves over the window, so there is no frame without a sticker.
+        standIn.dismiss(after: withImpact ? tuning.spriteHandoverDuration : 0)
+        guard withImpact else { return }
         let impact = tuning.scaled(tuning.impactDuration)
         rootView.animateScale(
             through: [CGFloat(tuning.flightScale), CGFloat(tuning.impactSquash), 1],
@@ -411,15 +419,24 @@ final class StickerController: NSObject {
     // MARK: Peeling by the corner (spec 4.10)
 
     /// The corner was grabbed at `location` (screen coordinates).
+    ///
+    /// From here to the end of the gesture the sticker is a picture in the effects
+    /// overlay: there the folded paper can go anywhere on the screen, and where
+    /// there is no paper there is nothing at all, no backdrop and no shadow.
     func beginPeel(at location: CGPoint, time: TimeInterval) {
         guard !isClosed, !isLeaving, !isPeeling else { return }
         settleFlight()
         motion.cancel()
         isPeeling = true
+        peelFollowsMouseButton = false
         peelStartMouse = location
         peelTrail = [(location, time)]
         let hint = -CGFloat(tuning.peelCornerHint)
         peelPull = CGSize(width: hint, height: hint)
+        if let overlay = manager?.effectsOverlay, showStandIn(in: overlay) {
+            standIn.setCornerPull(peelPull)
+            standIn.hideWindow()
+        }
         NSCursor.closedHand.set()
     }
 
@@ -434,14 +451,30 @@ final class StickerController: NSObject {
             width: hint + location.x - peelStartMouse.x,
             height: hint - (location.y - peelStartMouse.y)
         )
-        rootView.setCornerPull(peelPull)
+        showCornerPull(peelPull)
     }
+
+    /// The fold is drawn on the picture; without one (no overlay), in the window.
+    private func showCornerPull(_ pull: CGSize) {
+        if standIn.isUp {
+            standIn.setCornerPull(pull)
+        } else {
+            rootView.setCornerPull(pull)
+        }
+    }
+
+    /// The fold as it is drawn in the overlay now; `nil` while the sheet lies flat.
+    var visibleFold: PaperFold? { standIn.fold }
+
+    /// True while a picture of this sticker is in the effects overlay.
+    var isDrawnInOverlay: Bool { standIn.isUp }
 
     /// The corner was let go: far or fast enough and the sticker comes off,
     /// otherwise the corner springs back.
     func endPeel(at location: CGPoint, time: TimeInterval) {
         guard isPeeling else { return }
         updatePeel(to: location, time: time)
+        peelFollowsMouseButton = false
         let distance = Double(hypot(location.x - peelStartMouse.x, location.y - peelStartMouse.y))
         let speed = PeelGesture.releaseSpeed(trail: peelTrail)
         let gesture = PeelGesture(distanceThreshold: tuning.peelDistance, speedThreshold: tuning.peelSpeed)
@@ -457,6 +490,8 @@ final class StickerController: NSObject {
         guard isPeeling else { return }
         motion.cancel()
         isPeeling = false
+        peelFollowsMouseButton = false
+        standIn.handBack(dissolve: 0)
         applyMode(from: nil, animated: false)
     }
 
@@ -467,7 +502,7 @@ final class StickerController: NSObject {
         motion.run(duration: spring.settlingTime, step: { [weak self] elapsed in
             guard let self else { return }
             let progress = CGFloat(spring.value(at: elapsed))
-            self.rootView.setCornerPull(CGSize(
+            self.showCornerPull(CGSize(
                 width: from.width + (hint - from.width) * progress,
                 height: from.height + (hint - from.height) * progress
             ))
@@ -475,9 +510,21 @@ final class StickerController: NSObject {
             guard let self else { return }
             self.isPeeling = false
             self.machine.cancelPendingRelease()
+            // The window comes back under the picture, then the picture goes.
+            self.standIn.handBack(dissolve: self.tuning.spriteHandoverDuration)
             self.applyMode(from: nil, animated: false)
             self.manager?.pointerNeedsAttention()
         })
+    }
+
+    /// Puts a picture of the sticker, lifted, exactly over its paper.
+    private func showStandIn(in overlay: EffectsOverlay) -> Bool {
+        standIn.show(
+            in: overlay,
+            paperFrame: paperFrame,
+            screenFrame: manager?.screenFrame(around: panel.frame),
+            shadow: shadowSpec(lifted: true)
+        )
     }
 
     // MARK: Pointer
@@ -488,24 +535,37 @@ final class StickerController: NSObject {
         if isDragging || isPeeling || machine.needsContinuousInput {
             return true
         }
-        let reach = CGFloat(tuning.pointerPollProximity)
+        let reach = CGFloat(max(tuning.pointerPollProximity, tuning.haloRadius + 8))
         return paperFrame.insetBy(dx: -reach, dy: -reach).contains(location)
     }
 
     /// Turns what the pointer does into input for the state machine (in
     /// `StickflowCore`, where it is unit-tested) and shows the mode it answers with.
     func pointerDidUpdate(_ sample: PointerSample) {
+        // A safety net: should the invisible window miss the mouse-up, the button's state ends the pull.
+        if isPeeling, peelFollowsMouseButton, !sample.isMouseDown {
+            endPeel(at: sample.location, time: sample.time)
+            return
+        }
         guard isOnScreen, !isDragging, !isPeeling, !isAirborne, !isMenuOpen else { return }
 
         let paper = paperFrame
         let proximity = CGFloat(tuning.editKeyProximity)
+        let isEditKeyDown = sample.modifiers.contains(preferences.editKey.flag)
+        // The cursor's halo (spec 4.7): how much this sticker fades depends on how
+        // near the cursor is. The edit key switches the halo off.
+        let halo = HaloFade(radius: tuning.haloRadius, fullFadeWithin: tuning.haloCore, fadedOpacity: tuning.fadedOpacity)
+        let distance = HaloFade.distance(from: sample.location, to: paper)
         let input = StickerStateMachine.Input(
             isOver: paper.contains(sample.location),
             isNear: paper.insetBy(dx: -proximity, dy: -proximity).contains(sample.location),
-            isEditKeyDown: sample.modifiers.contains(preferences.editKey.flag),
+            isEditKeyDown: isEditKeyDown,
             isMouseDown: sample.isMouseDown,
+            isInHalo: !isEditKeyDown && halo.reaches(distance: distance),
             time: sample.time
         )
+        let previousHalo = haloOpacity
+        haloOpacity = halo.opacity(distance: distance)
         let rules = StickerStateMachine.Rules(
             fadeEnabled: preferences.fadeEnabled,
             releaseGrace: tuning.editKeyReleaseGrace,
@@ -522,6 +582,15 @@ final class StickerController: NSObject {
             setIgnoresMouse(!input.isNear)
         }
         modeDidChange(from: previous)
+        if machine.mode == .faded, previous == .faded, abs(haloOpacity - previousHalo) > 0.005 {
+            // The cursor moved within the halo: the opacity follows the distance.
+            let base = haloOpacity < previousHalo ? tuning.fadeOutDuration : tuning.fadeInDuration
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = tuning.scaled(base)
+                context.timingFunction = MotionCurve.easeOut.timingFunction
+                panel.animator().alphaValue = CGFloat(haloOpacity)
+            }
+        }
         if outcome.hidesHint {
             manager?.hideHint()
         }
@@ -746,6 +815,7 @@ extension StickerController: StickerRootViewDelegate {
             }
         case .corner:
             beginPeel(at: NSEvent.mouseLocation, time: event.timestamp)
+            peelFollowsMouseButton = isPeeling
         case let .checkbox(line):
             // Ticks the task without entering editing (spec 4.6).
             view.textView.toggleDone(line: line)
