@@ -697,6 +697,23 @@
           }
         }
       }
+    },
+    "dictation.model_downloading": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloading the GigaAM speech recognition model: %lld%%. Once, 445 MB."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачиваю модель распознавания речи GigaAM: %lld %%. Один раз, 445 МБ."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

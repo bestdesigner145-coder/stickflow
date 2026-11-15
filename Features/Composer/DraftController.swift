@@ -108,6 +108,7 @@ final class DraftController: NSObject, NSTextViewDelegate {
             elapsed: dictation.elapsed,
             level: dictation.level,
             message: dictation.message,
+            notice: dictation.modelProgress.map { L10n.dictationModelDownloading(percent: Int($0 * 100)) },
             isEnding: DictationClock.isEnding(elapsed: dictation.elapsed, limit: tuning.dictationLimit, warning: tuning.dictationWarning)
         )
         guard isOpen else { return }
@@ -419,7 +420,8 @@ final class DraftView: NSView {
         case .recognizing: statusLabel.stringValue = L10n.dictationListening
         case .idle, .preparing: statusLabel.stringValue = ""
         }
-        messageLabel.stringValue = dictation.state == .idle ? (dictation.message ?? "") : ""
+        // A failure is shown once the dictation is over; a download, all the time.
+        messageLabel.stringValue = (dictation.state == .idle ? dictation.message : nil) ?? dictation.notice ?? ""
         microphone.isEnabled = dictation.state == .idle || isRecording
         microphone.setAccessibilityLabel(isRecording ? L10n.draftStopDictation : L10n.draftDictate)
         levelBar.isHidden = !isRecording

@@ -10,6 +10,8 @@ struct DictationStatus: Equatable {
     var elapsed: TimeInterval = 0
     var level: Float = 0
     var message: String?
+    /// Something going on in the background, e.g. the speech model being downloaded.
+    var notice: String?
     /// The limit is near: the timer is red.
     var isEnding = false
 }
@@ -34,6 +36,9 @@ final class Dictation {
     private(set) var level: Float = 0
     /// What went wrong last time; cleared by the next start.
     private(set) var message: String?
+    /// How much of the speech model has been downloaded, 0…1; `nil` when no
+    /// download is going on.
+    private(set) var modelProgress: Double?
 
     /// State, time, level or message changed.
     var onChange: (() -> Void)?
@@ -94,7 +99,12 @@ final class Dictation {
                 return
             }
             do {
-                try await engine.prepare(progress: { _ in })
+                // The engine may go on downloading its model after it is ready to listen.
+                try await engine.prepare(progress: { [weak self] value in
+                    Task { @MainActor [weak self] in
+                        self?.modelDidProgress(value)
+                    }
+                })
             } catch {
                 if !Task.isCancelled { self.fail(with: error) }
                 return
@@ -151,6 +161,14 @@ final class Dictation {
         } else {
             onChange?()
         }
+    }
+
+    private func modelDidProgress(_ value: Double) {
+        let shown = value < 1 ? value : nil
+        // A hundred steps are enough for the eye.
+        guard shown.map({ Int($0 * 100) }) != modelProgress.map({ Int($0 * 100) }) else { return }
+        modelProgress = shown
+        onChange?()
     }
 
     private func fail(with error: any Error) {

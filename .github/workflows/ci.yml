@@ -4,6 +4,9 @@ on:
   push:
     branches: [main, "stage-*"]
   pull_request:
+  # Spec 17.3: the heavy checks run at night on main.
+  schedule:
+    - cron: "23 1 * * *"
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -212,3 +215,51 @@ jobs:
           name: Stickflow-debug-${{ matrix.os }}
           path: Stickflow-debug.zip
           retention-days: 14
+
+  # The only check of the real speech model (spec 7, 17.3): download it the way
+  # the app does and recognise speech with it. 445 MB per run, so it runs at
+  # night on main, and at once for a commit whose message has [asr].
+  asr:
+    name: Speech recognition with the real model
+    needs: lint
+    if: ${{ github.event_name == 'schedule' || contains(github.event.head_commit.message, '[asr]') }}
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate Xcode project
+        run: |
+          which xcodegen || brew install xcodegen
+          xcodegen generate
+
+      - name: Build app (Debug)
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project Stickflow.xcodeproj \
+            -scheme Stickflow \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath build/DerivedData \
+            -quiet 2>&1 | tee build.log
+
+      - name: Make speech to recognise
+        run: |
+          mkdir -p asr
+          say -v '?' | grep -i "ru_RU" || echo "no Russian voice on this runner"
+          # The sample from GigaAM's own repository.
+          curl -fsSL --max-time 120 -o asr/example.wav https://cdn.chatwm.opensmodel.sberdevices.ru/GigaAM/example.wav \
+            || { rm -f asr/example.wav; echo "the GigaAM sample is not reachable"; }
+          if say -v Milena -o asr/said.aiff "Купить молоко, потом позвонить маме, и в пятнадцать тридцать созвон с разработкой."; then
+            afconvert -f WAVE -d LEI16@16000 -c 1 asr/said.aiff asr/said.wav
+          fi
+          rm -f asr/said.aiff
+          ls -l asr
+
+      - name: Recognise
+        run: |
+          set -o pipefail
+          APP=build/DerivedData/Build/Products/Debug/Stickflow.app/Contents/MacOS/Stickflow
+          "$APP" --transcribe asr/*.wav --model-dir "$RUNNER_TEMP/models" --cpu-only 2>&1 | tee asr/log.txt
+          python3 scripts/check-transcripts.py asr/log.txt

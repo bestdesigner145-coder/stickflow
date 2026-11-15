@@ -8,6 +8,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var environment: AppEnvironment?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        #if DEBUG
+        // `--transcribe`: recognise sound files with the real model and quit (CI).
+        if SpeechProbe.runIfRequested() { return }
+        #endif
         do {
             let environment = try AppEnvironment()
             self.environment = environment

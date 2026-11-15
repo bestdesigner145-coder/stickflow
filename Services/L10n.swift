@@ -38,6 +38,10 @@ enum L10n {
     static var dictationNothingHeard: String { String(localized: "dictation.error.nothing_heard") }
     static var dictationFailed: String { String(localized: "dictation.error.failed") }
 
+    static func dictationModelDownloading(percent: Int) -> String {
+        String.localizedStringWithFormat(String(localized: "dictation.model_downloading"), percent)
+    }
+
     static var toastPeeledOne: String { String(localized: "toast.peeled_one") }
     static var toastRestore: String { String(localized: "toast.restore") }
 
