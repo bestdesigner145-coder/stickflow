@@ -1,0 +1,43 @@
+name: Mirror speech model
+
+# Spec 7: the app takes the speech model from this repository's Releases first.
+# Changing models/*.source.json copies the model from Hugging Face; the release
+# itself is created only when the file says "publish": true.
+on:
+  push:
+    branches: ["stage-*", main]
+    paths: ["models/*.source.json"]
+
+permissions:
+  contents: write
+
+jobs:
+  mirror:
+    name: Copy the model
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download from Hugging Face
+        run: python3 scripts/mirror-model.py models/gigaam-v3-e2e-rnnt.source.json work
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$(python3 -c 'import json; print(json.load(open("models/gigaam-v3-e2e-rnnt.source.json"))["tag"])')"
+          publish="$(python3 -c 'import json; print(json.load(open("models/gigaam-v3-e2e-rnnt.source.json"))["publish"])')"
+          if [ "$publish" != "True" ]; then
+            echo "publish is off: nothing was released"
+            exit 0
+          fi
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "release $tag exists already"
+            exit 0
+          fi
+          gh release create "$tag" work/assets/* \
+            --title "Speech model: GigaAM-v3 e2e RNNT (Core ML)" \
+            --notes-file work/notes.md \
+            --target "$GITHUB_SHA" \
+            --latest=false
