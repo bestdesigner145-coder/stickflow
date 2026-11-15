@@ -117,6 +117,10 @@ enum SelfCheck {
             let textView = controller.rootView.textView
             check(controller.mode == .editing, "a new sticker starts in editing")
             check(controller.panel.isKeyWindow, "the panel has keyboard focus while editing")
+            // A busy runner may start the first animation late: give it time before judging.
+            for _ in 0..<20 where controller.panel.alphaValue < 0.98 {
+                await pause(0.1)
+            }
             check(abs(Double(controller.panel.alphaValue) - 1) < 0.02, "the new sticker has finished appearing (alpha \(controller.panel.alphaValue))")
             let frontWhileEditing = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
             note("frontmost app while editing: \(frontWhileEditing ?? "none"), Stickflow active: \(NSApp.isActive)")

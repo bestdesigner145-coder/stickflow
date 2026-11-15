@@ -68,6 +68,9 @@ public struct MelFrontend: Sendable {
         }
     }
 
+    /// What a band holds where there is no sound: `log(1e-9)`.
+    static let floor = Float(Foundation.log(1e-9))
+
     /// Log-mel features, one row per mel band: `result[mel * frames + frame]`.
     /// - Parameters:
     ///   - samples: mono sound at 16 kHz.
@@ -75,7 +78,8 @@ public struct MelFrontend: Sendable {
     public func logMel(_ samples: [Float], frames: Int) -> [Float] {
         let size = Self.fftSize
         let bins = Self.binCount
-        var result = [Float](repeating: 0, count: Self.melCount * frames)
+        // Frames that start after the end of the sound are silence: nothing to work out.
+        var result = [Float](repeating: Self.floor, count: Self.melCount * max(frames, 0))
         // 320 is 5 · 2⁶, a length this transform takes as it is.
         let transform = try? vDSP.DiscreteFourierTransform(
             previous: nil,
@@ -84,28 +88,38 @@ public struct MelFrontend: Sendable {
             transformType: .complexComplex,
             ofType: Float.self
         )
-        guard frames > 0, let transform else { return result }
+        guard frames > 0, !samples.isEmpty, let transform else { return result }
+        let sounding = min(frames, (samples.count - 1) / Self.hop + 1)
         var real = [Float](repeating: 0, count: size)
         let zeros = [Float](repeating: 0, count: size)
         var outReal = [Float](repeating: 0, count: size)
         var outImaginary = [Float](repeating: 0, count: size)
+        var realSquares = [Float](repeating: 0, count: bins)
+        var imaginarySquares = [Float](repeating: 0, count: bins)
         var power = [Float](repeating: 0, count: bins)
-        for frame in 0..<frames {
-            let start = frame * Self.hop
-            for index in 0..<size {
-                let position = start + index
-                real[index] = position < samples.count ? samples[position] * window[index] : 0
-            }
-            transform.transform(inputReal: real, inputImaginary: zeros, outputReal: &outReal, outputImaginary: &outImaginary)
-            for bin in 0..<bins {
-                power[bin] = outReal[bin] * outReal[bin] + outImaginary[bin] * outImaginary[bin]
-            }
-            for (mel, filter) in filters.enumerated() {
-                var energy: Float = 0
-                for (offset, weight) in filter.weights.enumerated() {
-                    energy += weight * power[filter.first + offset]
+        samples.withUnsafeBufferPointer { source in
+            guard let base = source.baseAddress else { return }
+            for frame in 0..<sounding {
+                let start = frame * Self.hop
+                let available = min(size, samples.count - start)
+                vDSP_vmul(base + start, 1, window, 1, &real, 1, vDSP_Length(available))
+                if available < size {
+                    for index in available..<size {
+                        real[index] = 0
+                    }
                 }
-                result[mel * frames + frame] = Foundation.log(min(max(energy, 1e-9), 1e9))
+                transform.transform(inputReal: real, inputImaginary: zeros, outputReal: &outReal, outputImaginary: &outImaginary)
+                vDSP_vsq(outReal, 1, &realSquares, 1, vDSP_Length(bins))
+                vDSP_vsq(outImaginary, 1, &imaginarySquares, 1, vDSP_Length(bins))
+                vDSP_vadd(realSquares, 1, imaginarySquares, 1, &power, 1, vDSP_Length(bins))
+                power.withUnsafeBufferPointer { spectrum in
+                    guard let bands = spectrum.baseAddress else { return }
+                    for (mel, filter) in filters.enumerated() {
+                        var energy: Float = 0
+                        vDSP_dotpr(filter.weights, 1, bands + filter.first, 1, &energy, vDSP_Length(filter.weights.count))
+                        result[mel * frames + frame] = Foundation.log(min(max(energy, 1e-9), 1e9))
+                    }
+                }
             }
         }
         return result
