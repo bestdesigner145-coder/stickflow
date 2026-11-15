@@ -48,6 +48,11 @@ final class GigaAMEngine: SpeechEngine {
         guard !text.isEmpty else { throw SpeechError.nothingHeard }
         return text
     }
+
+    /// Where the time of the last transcription went, for the probe.
+    func lastTimings() async -> String {
+        await runner.timings
+    }
 }
 
 /// Owns the loaded models; one transcription at a time.
@@ -75,6 +80,8 @@ private actor GigaAMRunner {
     private let frontend = MelFrontend()
     private let chunker = SpeechChunker()
     private var models: Models?
+    /// Seconds spent on the features, the encoder and the decoding last time.
+    private(set) var timings = ""
 
     init(computeUnits: MLComputeUnits) {
         self.computeUnits = computeUnits
@@ -112,6 +119,7 @@ private actor GigaAMRunner {
     func transcribe(_ samples: [Float]) throws -> String {
         guard let models else { throw SpeechError.unavailable }
         var texts: [String] = []
+        timings = ""
         for range in chunker.split(samples) {
             let text = try transcribeWindow(Array(samples[range]), models: models)
             if !text.isEmpty { texts.append(text) }
@@ -123,7 +131,10 @@ private actor GigaAMRunner {
         let frames = min(MelFrontend.frameCount(sampleCount: window.count), Self.windowFrames)
         guard frames > 0 else { return "" }
         // The whole 30 s window, silent after the end of the sound, as in the reference.
+        var mark = Date()
         let features = frontend.logMel(window, frames: Self.windowFrames)
+        let melTime = Date().timeIntervalSince(mark)
+        mark = Date()
         let encoded = try models.encoder.prediction(from: MLDictionaryFeatureProvider(dictionary: [
             "features": MLMultiArray(MLShapedArray<Float>(scalars: features, shape: [1, MelFrontend.melCount, Self.windowFrames])),
             "length": MLMultiArray(MLShapedArray<Int32>(scalars: [Int32(frames)], shape: [1])),
@@ -137,6 +148,8 @@ private actor GigaAMRunner {
         let steps = states.shape[2].intValue
         let hidden = MLShapedArray<Float>(converting: states).scalars
         let encoderFrames = min(max(Int(length[0].doubleValue.rounded()), 0), steps)
+        let encoderTime = Date().timeIntervalSince(mark)
+        mark = Date()
 
         let zeros = [Float](repeating: 0, count: Self.stateSize)
         let start = DecoderState(
@@ -172,6 +185,10 @@ private actor GigaAMRunner {
             }
             return (TransducerGreedyDecoder.argmax(MLShapedArray<Float>(converting: logits).scalars), cached.next)
         }
+        timings += String(
+            format: "mel %.2f s, encoder %.2f s, decoding %.2f s (%d frames, %d tokens); ",
+            melTime, encoderTime, Date().timeIntervalSince(mark), encoderFrames, tokens.count
+        )
         return PieceText.join(tokens, pieces: models.pieces)
     }
 

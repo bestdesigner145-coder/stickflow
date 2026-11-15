@@ -76,7 +76,14 @@ public struct MelFrontend: Sendable {
         let size = Self.fftSize
         let bins = Self.binCount
         var result = [Float](repeating: 0, count: Self.melCount * frames)
-        let transform = vDSP.DFT(count: size, direction: .forward, transformType: .complexComplex, ofType: Float.self)
+        // 320 is 5 · 2⁶, a length this transform takes as it is.
+        let transform = try? vDSP.DiscreteFourierTransform(
+            previous: nil,
+            count: size,
+            direction: .forward,
+            transformType: .complexComplex,
+            ofType: Float.self
+        )
         guard frames > 0, let transform else { return result }
         var real = [Float](repeating: 0, count: size)
         let zeros = [Float](repeating: 0, count: size)

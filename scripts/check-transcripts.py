@@ -18,7 +18,8 @@ for line in lines:
     if not re.search("[а-яё]{3,}", text):
         problems.append(f"no Russian text: {line}")
     if line.startswith("TRANSCRIPT said.wav"):
-        for word in ("молоко", "маме", "созвон"):
+        # The system voice says «созвон» so that it is heard as «созван»; that word is not checked.
+        for word in ("молоко", "маме", "15:30"):
             if word not in text:
                 problems.append(f"«{word}» is missing: {line}")
 for problem in problems:

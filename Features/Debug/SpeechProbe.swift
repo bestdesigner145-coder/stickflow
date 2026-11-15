@@ -58,6 +58,11 @@ enum SpeechProbe {
             let text = try await engine.transcribe(audio)
             let took = Date().timeIntervalSince(started)
             say(String(format: "TRANSCRIPT %@ [%.1f s of sound, %.2f s]: %@", url.lastPathComponent, audio.duration, took, text))
+            await say("TIMINGS \(engine.lastTimings())")
+            // Once more: the first run pays for warming the models up.
+            started = Date()
+            _ = try await engine.transcribe(audio)
+            await say(String(format: "AGAIN in %.2f s: ", Date().timeIntervalSince(started)) + engine.lastTimings())
         }
     }
 
