@@ -8,7 +8,8 @@ final class StickerStateMachineTests: XCTestCase {
     private typealias Input = StickerStateMachine.Input
     private typealias Outcome = StickerStateMachine.Outcome
 
-    private let rules = StickerStateMachine.Rules()
+    /// Most tests use a fade delay, to show that the timer works when one is set.
+    private let rules = StickerStateMachine.Rules(fadeDelay: 0.12)
 
     private func over(key: Bool = false, mouse: Bool = false, at time: TimeInterval) -> Input {
         Input(isOver: true, isNear: true, isEditKeyDown: key, isMouseDown: mouse, time: time)
@@ -22,6 +23,15 @@ final class StickerStateMachineTests: XCTestCase {
         let machine = StickerStateMachine()
         XCTAssertEqual(machine.mode, .rest)
         XCTAssertFalse(machine.needsContinuousInput)
+    }
+
+    func testFadesAtOnceByDefault() {
+        // Spec 4.7: no pause before the fade starts.
+        var machine = StickerStateMachine()
+        _ = machine.pointerMoved(over(at: 0), rules: StickerStateMachine.Rules())
+        XCTAssertEqual(machine.mode, .faded)
+        _ = machine.pointerMoved(away(at: 0.01), rules: StickerStateMachine.Rules())
+        XCTAssertEqual(machine.mode, .rest)
     }
 
     func testFadesAfterTheDelayAndComesBack() {
@@ -42,7 +52,7 @@ final class StickerStateMachineTests: XCTestCase {
 
     func testFadeCanBeSwitchedOff() {
         var machine = StickerStateMachine()
-        let noFade = StickerStateMachine.Rules(fadeEnabled: false)
+        let noFade = StickerStateMachine.Rules(fadeEnabled: false, fadeDelay: 0.12)
         _ = machine.pointerMoved(over(at: 0), rules: noFade)
         _ = machine.pointerMoved(over(at: 5), rules: noFade)
         XCTAssertEqual(machine.mode, .rest)
@@ -83,7 +93,7 @@ final class StickerStateMachineTests: XCTestCase {
         _ = machine.pointerMoved(over(key: true, mouse: true, at: 0), rules: rules)
         XCTAssertEqual(machine.mode, .rest)
 
-        let lenient = StickerStateMachine.Rules(suppressEditWhileMouseDown: false)
+        let lenient = StickerStateMachine.Rules(fadeDelay: 0.12, suppressEditWhileMouseDown: false)
         _ = machine.pointerMoved(over(key: true, mouse: true, at: 0.01), rules: lenient)
         XCTAssertEqual(machine.mode, .editMode)
     }
@@ -132,7 +142,7 @@ final class StickerStateMachineTests: XCTestCase {
     }
 
     func testKeyHeldOnArrivalCanBeRequiredToBePressedAgain() {
-        let strict = StickerStateMachine.Rules(keyMustBePressedAtSticker: true)
+        let strict = StickerStateMachine.Rules(fadeDelay: 0.12, keyMustBePressedAtSticker: true)
         var machine = StickerStateMachine()
         _ = machine.pointerMoved(away(key: true, at: 0), rules: strict)
         _ = machine.pointerMoved(over(key: true, at: 0.1), rules: strict)

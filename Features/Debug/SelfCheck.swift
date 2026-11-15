@@ -217,9 +217,7 @@ enum SelfCheck {
             }
 
             controller.pointerDidUpdate(sample(inside, at: 0))
-            check(controller.mode == .rest, "no fade before the delay")
-            controller.pointerDidUpdate(sample(inside, at: tuning.fadeDelay + 0.01))
-            check(controller.mode == .faded, "the sticker fades under the cursor after the delay")
+            check(controller.mode == .faded, "the sticker starts to fade the moment the cursor is over it, with no pause")
             await pause(0.35)
             check(abs(Double(controller.panel.alphaValue) - tuning.fadedOpacity) < 0.02, "faded window alpha is \(tuning.fadedOpacity) (is \(controller.panel.alphaValue))")
             check(controller.panel.ignoresMouseEvents, "a faded sticker still ignores the mouse")

@@ -13,7 +13,8 @@ and offer one or two options (spec 0.4).
 ## How to work
 
 - Work in the stages of spec section 14. Do not start a stage before the author accepts the previous one.
-- Short branches, Conventional Commits (`feat:`, `fix:`, `chore:` …), squash-merge. **Never merge into `main` yourself.**
+- Short branches, Conventional Commits (`feat:`, `fix:`, `chore:` …), squash-merge.
+- You merge a stage's PR into `main` yourself, but **only after the author's explicit «принимаю» and with green CI** (spec 17.2). Without both, do not merge.
 - Code and comments in English. UI strings in `Resources/Localizable.xcstrings`, Russian and English both.
 - No secrets in the repository. No network requests without the user's consent (spec 0.8).
 - Every number (timing, size, threshold) goes into `Tuning.swift`; debatable behaviour gets a switch in the debug Tuning panel.

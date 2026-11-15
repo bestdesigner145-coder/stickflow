@@ -150,7 +150,6 @@ struct TuningPanelView: View {
 
     private var fadeSection: some View {
         Section {
-            SliderRow(title: "Fade delay, s", value: $tuning.fadeDelay, range: 0...0.6, onChange: onTuningChange)
             SliderRow(title: "Faded opacity", value: $tuning.fadedOpacity, range: 0.05...1, onChange: onTuningChange)
             SliderRow(title: "Fade out, s", value: $tuning.fadeOutDuration, range: 0...0.6, onChange: onTuningChange)
             SliderRow(title: "Fade in, s", value: $tuning.fadeInDuration, range: 0...0.6, onChange: onTuningChange)

@@ -26,7 +26,8 @@ public struct StickerStateMachine: Equatable, Sendable {
     /// Values that come from settings and `Tuning`.
     public struct Rules: Equatable, Sendable {
         public var fadeEnabled: Bool
-        /// Seconds the cursor rests on the sticker before it fades.
+        /// Seconds the cursor rests on the sticker before it starts to fade. Zero by
+        /// the spec (4.7): a pause before an animation reads as lag.
         public var fadeDelay: TimeInterval
         /// Seconds edit mode outlives the key or the cursor leaving.
         public var releaseGrace: TimeInterval
@@ -39,7 +40,7 @@ public struct StickerStateMachine: Equatable, Sendable {
 
         public init(
             fadeEnabled: Bool = true,
-            fadeDelay: TimeInterval = 0.12,
+            fadeDelay: TimeInterval = 0,
             releaseGrace: TimeInterval = 0.15,
             hintDwell: TimeInterval = 1,
             suppressEditWhileMouseDown: Bool = true,

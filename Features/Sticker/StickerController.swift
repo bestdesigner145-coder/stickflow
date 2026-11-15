@@ -334,7 +334,6 @@ final class StickerController: NSObject {
         )
         let rules = StickerStateMachine.Rules(
             fadeEnabled: preferences.fadeEnabled,
-            fadeDelay: tuning.fadeDelay,
             releaseGrace: tuning.editKeyReleaseGrace,
             hintDwell: tuning.hintDwell,
             suppressEditWhileMouseDown: tuning.suppressEditWhileMouseDown,

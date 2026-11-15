@@ -40,10 +40,11 @@ final class Tuning {
 
     var restTextOpacity: Double = 0.92
     var doneTextOpacity: Double = 0.45
-    var fadeDelay: Double = 0.120
     var fadedOpacity: Double = 0.2
-    var fadeOutDuration: Double = 0.150
-    var fadeInDuration: Double = 0.200
+    // The fade starts the moment the cursor is over the sticker: no pause before
+    // an animation, either at once or smoothly (spec 4.7, 6.7).
+    var fadeOutDuration: Double = 0.180
+    var fadeInDuration: Double = 0.220
 
     // MARK: Edit mode (4.6) and editing (4.8)
 
