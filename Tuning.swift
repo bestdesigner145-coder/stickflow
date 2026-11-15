@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 Stickflow contributors
 
+import AppKit
 import Foundation
 import Observation
 import QuartzCore
@@ -173,6 +174,15 @@ final class Tuning {
     /// and is hidden in Mission Control. For comparing how stickers behave when
     /// the desktop changes.
     var spacesBehaviorTransient = false
+    /// Overrides the system's "Reduce motion" for tests: `true` or `false` forces
+    /// it, `nil` follows the system.
+    var forcedReduceMotion: Bool?
+
+    /// "Reduce motion" is on: movement and rotation become a short cross-fade (spec 6.7).
+    var reduceMotion: Bool {
+        forcedReduceMotion ?? NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    }
+
     /// On: a cursor that flew into the zone is ignored until it leaves and comes
     /// back slowly. Off: it may stop in the zone and still call the pad.
     var zoneRejectsFastEntry = false

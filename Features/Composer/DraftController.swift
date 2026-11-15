@@ -81,7 +81,7 @@ final class DraftController: NSObject, NSTextViewDelegate {
 
         let duration = tuning.scaled(fromPad ? tuning.draftFromPadDuration : tuning.draftFromHotkeyDuration)
         let startScale = CGFloat(fromPad ? tuning.draftFromPadStartScale : tuning.draftFromHotkeyStartScale)
-        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let reduceMotion = tuning.reduceMotion
         panel.alphaValue = duration > 0 ? 0 : 1
         panel.orderFrontRegardless()
         // Key without activating the app: the app in front stays in front.

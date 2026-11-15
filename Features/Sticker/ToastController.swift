@@ -81,7 +81,7 @@ final class ToastController: NSObject {
         NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(timeoutFired), object: nil)
         perform(#selector(timeoutFired), with: nil, afterDelay: tuning.toastDuration)
 
-        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let reduceMotion = tuning.reduceMotion
         let shift = reduceMotion ? 0 : CGFloat(tuning.toastShift)
         panel.alphaValue = 0
         panel.setFrame(target.offsetBy(dx: 0, dy: -shift), display: true)

@@ -91,6 +91,9 @@ enum SelfCheck {
             environment.preferences.hideFromScreenCapture = false
             environment.preferences.hideDuringScreenSharing = false
             stickers.applyPreferences()
+            note("system Reduce Motion: \(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)")
+            // The scenario checks the animated paths whatever the runner's settings are.
+            tuning.forcedReduceMotion = false
             let watcher = stickers.captureWatcher
             note("screen-capture probe: available \(watcher.isAvailable), captured now \(String(describing: watcher.readNow()))")
 
@@ -610,6 +613,17 @@ enum SelfCheck {
             } else {
                 check(false, "there is a sticker to peel")
             }
+
+            // 14. With "Reduce motion" a sticker appears in its place, without the flight.
+            tuning.forcedReduceMotion = true
+            entry.toggleDraft()
+            await pause(0.3)
+            entry.draft.rootView.textView.insertText("Без полёта", replacementRange: entry.draft.rootView.textView.selectedRange())
+            entry.draft.submit()
+            check(stickers.controllers.last?.isAirborne == false, "with Reduce Motion the sticker does not fly")
+            await pause(0.5)
+            check(stickers.controllers.last?.sticker.title == "Без полёта" && stickers.controllers.last?.panel.isVisible == true, "it appears in its place")
+            tuning.forcedReduceMotion = nil
         }
 
         // MARK: Snapshots

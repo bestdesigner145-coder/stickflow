@@ -73,7 +73,7 @@ final class StickerController: NSObject {
             panel.orderFrontRegardless()
             return
         }
-        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let reduceMotion = tuning.reduceMotion
         let duration = tuning.scaled(reduceMotion ? tuning.reducedMotionFade : tuning.appearDuration)
         let targetAlpha = mode == .faded ? CGFloat(tuning.fadedOpacity) : 1
         panel.alphaValue = 0
@@ -128,7 +128,7 @@ final class StickerController: NSObject {
             return
         }
 
-        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let reduceMotion = tuning.reduceMotion
         let moving = byGesture ? tuning.peelGestureDuration : tuning.peelDuration
         let duration = tuning.scaled(reduceMotion ? tuning.reducedMotionFade : moving)
         let curve: MotionCurve = reduceMotion ? .ease : .easeInOut
@@ -342,7 +342,7 @@ final class StickerController: NSObject {
     func flyIn(from start: CGRect) {
         guard !isClosed, !isLeaving else { return }
         let duration = tuning.scaled(tuning.flightDuration)
-        guard duration > 0, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+        guard duration > 0, !tuning.reduceMotion else {
             // Reduce Motion: a cross-fade instead of the flight and the impact.
             show(animated: true)
             return
