@@ -201,6 +201,11 @@ final class Tuning {
     /// back slowly. Off: it may stop in the zone and still call the pad.
     var zoneRejectsFastEntry = false
 
+    /// Rules (spec 8.1): read "в три" said without "утра" or "дня" as 15:00, the
+    /// way the spec's example does. Off (author, 15.11.2026): no guessing, such
+    /// an hour stays in the text as it was said.
+    var rulesAssumeAfternoon = false
+
     // MARK: Dictation (spec 7)
 
     /// The longest dictation, seconds; the timer turns red this long before the end.

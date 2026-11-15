@@ -714,10 +714,10 @@ enum SelfCheck {
                 let lines = planned.sticker.blocks.map { "\($0.kind.rawValue):\($0.indent):\($0.text)" }
                 let expected = [
                     "todo:0:Доделать экран кошелька", "bullet:1:пустые состояния", "bullet:1:ошибки",
-                    "todo:0:Созвониться с разработкой — 15:00", "heading2:0:Если успею", "todo:0:Написать пост в телегу",
+                    "todo:0:Созвониться с разработкой в три", "heading2:0:Если успею", "todo:0:Написать пост в телегу",
                 ]
                 check(planned.sticker.title == "План на сегодня", "a dictated paragraph gets the default title (\(planned.sticker.title))")
-                check(lines == expected, "the rules take it apart into tasks, details, a time and an optional section (\(lines))")
+                check(lines == expected, "the rules take it apart into tasks, details and an optional section (\(lines))")
                 check(planned.sticker.rawInput == dictated, "what was said is kept with the sticker")
                 check(!entry.draft.isOpen, "the draft closes once the plan is stuck")
                 snapshot(planned, name: "16-structured")

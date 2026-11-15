@@ -5,7 +5,7 @@ import Foundation
 
 /// The structurer that works at once and without any model (spec 8.1, "Правила"):
 /// drops filler words, cuts dictated text into items at "потом", "ещё" and full
-/// stops, pulls the time out ("в три" is 15:00), moves "если успею" into a section
+/// stops, pulls the time out ("в 15", "в три дня" are 15:00), moves "если успею" into a section
 /// of its own and turns what follows "там" into details.
 ///
 /// It works on words, not on meaning: it never rephrases and never adds anything.
@@ -20,7 +20,7 @@ public struct RuleStructurer: Structurer {
     public func health() async -> StructurerHealth { .ready }
 
     public func structure(_ request: StructureRequest) async throws -> NotePlan {
-        let plan = Self.plan(from: request.text)
+        let plan = Self.plan(from: request.text, assumesAfternoon: request.ambiguousHoursAreAfternoon)
         guard !plan.isEmpty else { throw StructurerError.nothingToDo }
         return plan
     }
@@ -277,7 +277,10 @@ public struct RuleStructurer: Structurer {
     }
 
     /// Finds "в три", "в 11", "в 15:30", "at 3 pm" and takes it out of the words.
-    static func extractTime(from tokens: [String]) -> (time: String?, rest: [String]) {
+    /// - Parameter assumesAfternoon: "в три" without "утра" or "дня" is read as
+    ///   15:00. Off by default: such an hour stays in the text as it was said,
+    ///   because a guess can be wrong (author's decision, 15.11.2026).
+    static func extractTime(from tokens: [String], assumesAfternoon: Bool = false) -> (time: String?, rest: [String]) {
         for index in tokens.indices {
             let word = key(tokens[index])
             let hasPreposition = (word == "в" || word == "at") && index + 1 < tokens.count
@@ -323,8 +326,11 @@ public struct RuleStructurer: Structurer {
                 if hour < 12 { hour += 12 }
             } else if !isExplicit {
                 if countNouns.contains(where: { qualifier.hasPrefix($0) }) { continue }
-                // A working day: "в три" is 15:00.
-                if (1...7).contains(hour) { hour += 12 }
+                if (1...7).contains(hour) {
+                    // "в семь" may be morning or evening.
+                    guard assumesAfternoon else { continue }
+                    hour += 12
+                }
             }
             guard hour <= 23 else { continue }
             let time = (hour < 10 ? "0" : "") + String(hour) + ":" + (minute < 10 ? "0" : "") + String(minute)
@@ -336,7 +342,7 @@ public struct RuleStructurer: Structurer {
     // MARK: Items
 
     /// "поправить шапку, заменить фото и проверить мобилку" is three actions.
-    private static func splitActions(_ tokens: [String]) -> [[String]] {
+    private static func splitActions(_ tokens: [String], assumesAfternoon: Bool) -> [[String]] {
         var parts: [[String]] = []
         var current: [String] = []
         for (index, token) in tokens.enumerated() {
@@ -346,10 +352,10 @@ public struct RuleStructurer: Structurer {
             var startsAction = index + 1 < tokens.count && isInfinitive(tokens[index + 1])
                 && current.contains(where: isInfinitive) && wordCount >= 2
             // "созвон в 9 утра, в полдень обед": two moments are two items.
-            if token == ",", !startsAction, extractTime(from: current).time != nil {
+            if token == ",", !startsAction, extractTime(from: current, assumesAfternoon: assumesAfternoon).time != nil {
                 let rest = tokens[(index + 1)...]
                 let segment = rest.prefix { $0 != "," }
-                startsAction = extractTime(from: Array(segment)).time != nil
+                startsAction = extractTime(from: Array(segment), assumesAfternoon: assumesAfternoon).time != nil
             }
             if isSeparator, startsAction {
                 parts.append(current)
@@ -377,14 +383,14 @@ public struct RuleStructurer: Structurer {
         return parts.map(trimmed).filter { !$0.isEmpty }.map(joined)
     }
 
-    private static func makeItem(from action: [String]) -> NotePlan.Item? {
+    private static func makeItem(from action: [String], assumesAfternoon: Bool) -> NotePlan.Item? {
         var tokens = action
         var details: [String] = []
         if let marker = tokens.indices.first(where: { $0 > 0 && detailMarkers.contains(key(tokens[$0])) }) {
             details = Array(tokens[(marker + 1)...])
             tokens = Array(tokens[..<marker])
         }
-        let timed = extractTime(from: strippingFillers(tokens))
+        let timed = extractTime(from: strippingFillers(tokens), assumesAfternoon: assumesAfternoon)
         tokens = trimmed(timed.rest)
         guard let first = tokens.first else { return nil }
         if let verb = nounToVerb[key(first)] {
@@ -411,7 +417,7 @@ public struct RuleStructurer: Structurer {
     }
 
     /// The whole pipeline. An empty plan means there was nothing to do in the text.
-    public static func plan(from text: String) -> NotePlan {
+    public static func plan(from text: String, assumesAfternoon: Bool = false) -> NotePlan {
         let russian = isRussian(text)
         var plain: [NotePlan.Item] = []
         var optional: [NotePlan.Item] = []
@@ -446,8 +452,8 @@ public struct RuleStructurer: Structurer {
                 for (index, part) in parts.enumerated() {
                     // "…, если успею, X": what follows is optional; "X, если успею": what precedes is.
                     let isOptional = parts.count > 1 && (index > 0 || trimmed(strippingFillers(parts[1])).isEmpty)
-                    for action in splitActions(trimmed(part)) {
-                        guard let item = makeItem(from: action) else { continue }
+                    for action in splitActions(trimmed(part), assumesAfternoon: assumesAfternoon) {
+                        guard let item = makeItem(from: action, assumesAfternoon: assumesAfternoon) else { continue }
                         if isOptional {
                             optional.append(item)
                         } else if let section {

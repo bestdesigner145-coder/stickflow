@@ -146,6 +146,9 @@ public struct StructureRequest: Sendable {
     public var rules: String
     public var locale: Locale
     public var now: Date
+    /// Read an hour from 1 to 7 said without "утра" or "дня" as afternoon
+    /// ("в три" is 15:00). Off: such an hour is left as it was said.
+    public var ambiguousHoursAreAfternoon = false
 
     public init(text: String, mode: Mode = .new, rules: String = "", locale: Locale = .current, now: Date = Date()) {
         self.text = text

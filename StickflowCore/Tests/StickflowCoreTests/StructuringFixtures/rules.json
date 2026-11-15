@@ -17,9 +17,9 @@
        ]
       },
       {
-       "text": "Созвониться с разработкой",
+       "text": "Созвониться с разработкой в три",
        "task": true,
-       "time": "15:00",
+       "time": null,
        "children": []
       }
      ]
@@ -533,9 +533,9 @@
        ]
       },
       {
-       "text": "Показать Кате",
+       "text": "Показать Кате в час",
        "task": true,
-       "time": "13:00",
+       "time": null,
        "children": []
       }
      ]
@@ -614,9 +614,9 @@
        "children": []
       },
       {
-       "text": "Call the dev team",
+       "text": "Call the dev team at 3",
        "task": true,
-       "time": "15:00",
+       "time": null,
        "children": []
       }
      ]

@@ -219,6 +219,8 @@ struct TuningPanelView: View {
                       isOn: $tuning.spacesBehaviorTransient, onChange: onTuningChange)
             ToggleRow(title: "Zone: reject fast entry",
                       isOn: $tuning.zoneRejectsFastEntry, onChange: onTuningChange)
+            ToggleRow(title: "Rules: «в три» without «дня» means 15:00",
+                      isOn: $tuning.rulesAssumeAfternoon, onChange: onTuningChange)
             ToggleRow(title: "Draft with text closes when focus is lost (kept as a draft)",
                       isOn: $tuning.draftWithTextClosesOnFocusLoss, onChange: onTuningChange)
             ToggleRow(title: "⌘Z restores a peeled sticker while the toast is up",

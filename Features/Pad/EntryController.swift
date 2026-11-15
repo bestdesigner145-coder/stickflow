@@ -347,7 +347,9 @@ final class EntryController: NSObject {
             stick(PlainTextPlan.make(from: text, plainLineKind: tuning.newLineAfterTitleIsTodo ? .todo : .text), rawInput: text)
             return
         }
-        let request = StructureRequest(text: text, locale: .current, now: clock.now)
+        var draftRequest = StructureRequest(text: text, locale: .current, now: clock.now)
+        draftRequest.ambiguousHoursAreAfternoon = tuning.rulesAssumeAfternoon
+        let request = draftRequest
         let structurer = self.structurer
         draft.isBusy = true
         structuring?.cancel()

@@ -59,17 +59,41 @@ final class StructuringTests: XCTestCase {
         XCTAssertEqual(plan, NotePlan(title: "План на сегодня", sections: [
             NotePlan.Section(heading: nil, items: [
                 NotePlan.Item(text: "Доделать экран кошелька", children: ["пустые состояния", "ошибки"]),
-                NotePlan.Item(text: "Созвониться с разработкой", time: "15:00"),
+                NotePlan.Item(text: "Созвониться с разработкой в три"),
             ]),
             NotePlan.Section(heading: "Если успею", items: [NotePlan.Item(text: "Написать пост в телегу")]),
         ]))
+    }
+
+    func testAmbiguousHoursStayAsTheyWereSaid() async throws {
+        func time(_ text: String, guessing: Bool = false) -> String? {
+            RuleStructurer.extractTime(from: RuleStructurer.tokenize(text), assumesAfternoon: guessing).time
+        }
+        // An hour from 1 to 7 may be morning or evening: no guess by default.
+        XCTAssertNil(time("созвон в три"))
+        XCTAssertNil(time("заехать в семь"))
+        XCTAssertNil(time("показать в час"))
+        XCTAssertNil(time("call at 3"))
+        XCTAssertEqual(time("в 7 утра"), "07:00")
+        XCTAssertEqual(time("в семь вечера"), "19:00")
+        XCTAssertEqual(time("в 8"), "08:00")
+        XCTAssertEqual(time("в 15"), "15:00")
+        // The spec's reading is still there for whoever wants it.
+        XCTAssertEqual(time("созвон в три", guessing: true), "15:00")
+        XCTAssertEqual(time("заехать в семь", guessing: true), "19:00")
+        XCTAssertEqual(time("показать в час", guessing: true), "13:00")
+        var request = StructureRequest(text: "Созвон с разработкой в три")
+        var plan = try await RuleStructurer().structure(request)
+        XCTAssertEqual(plan.items, [NotePlan.Item(text: "Созвониться с разработкой в три")])
+        request.ambiguousHoursAreAfternoon = true
+        plan = try await RuleStructurer().structure(request)
+        XCTAssertEqual(plan.items, [NotePlan.Item(text: "Созвониться с разработкой", time: "15:00")])
     }
 
     func testTimes() {
         func time(_ text: String) -> String? {
             RuleStructurer.extractTime(from: RuleStructurer.tokenize(text)).time
         }
-        XCTAssertEqual(time("созвон в три"), "15:00")
         XCTAssertEqual(time("в 11 созвон"), "11:00")
         XCTAssertEqual(time("встреча в 14:30"), "14:30")
         XCTAssertEqual(time("забрать в 18.30"), "18:30")
@@ -78,7 +102,6 @@ final class StructuringTests: XCTestCase {
         XCTAssertEqual(time("в 8 вечера"), "20:00")
         XCTAssertEqual(time("в 12 ночи"), "00:00")
         XCTAssertEqual(time("в полдень обед"), "12:00")
-        XCTAssertEqual(time("показать в час"), "13:00")
         XCTAssertEqual(time("call at 3 pm"), "15:00")
         XCTAssertEqual(time("созвон 16:45"), "16:45")
         XCTAssertNil(time("переписать в 2 раза короче"))
@@ -86,7 +109,7 @@ final class StructuringTests: XCTestCase {
         XCTAssertNil(time("встреча 15.11 с подрядчиком"), "a date is not a time")
         XCTAssertNil(time("в 25 местах"))
         XCTAssertNil(time("поехать в Самару"))
-        XCTAssertEqual(RuleStructurer.extractTime(from: ["созвон", "в", "три", "с", "Петей"]).rest, ["созвон", "с", "Петей"])
+        XCTAssertEqual(RuleStructurer.extractTime(from: ["созвон", "в", "15", "с", "Петей"]).rest, ["созвон", "с", "Петей"])
     }
 
     func testInfinitives() {
