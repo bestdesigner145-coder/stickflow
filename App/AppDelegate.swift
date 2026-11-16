@@ -11,6 +11,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #if DEBUG
         // `--transcribe`: recognise sound files with the real model and quit (CI).
         if SpeechProbe.runIfRequested() { return }
+        // `--structure-report`: score structurers on the golden set and quit (CI).
+        if StructureProbe.runIfRequested() { return }
         #endif
         do {
             let environment = try AppEnvironment()

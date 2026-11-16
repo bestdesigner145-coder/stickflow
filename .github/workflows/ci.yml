@@ -263,3 +263,55 @@ jobs:
           APP=build/DerivedData/Build/Products/Debug/Stickflow.app/Contents/MacOS/Stickflow
           "$APP" --transcribe asr/*.wav --model-dir "$RUNNER_TEMP/models" --cpu-only 2>&1 | tee asr/log.txt
           python3 scripts/check-transcripts.py asr/log.txt
+
+  # Spec 8.6: the golden set through candidate models, to choose the light one
+  # for the app. Gigabytes of downloads and a slow CPU, so only for a commit
+  # whose message has [llm]. The times are a runner's, not an M1's.
+  llm:
+    name: Structuring report on local models
+    needs: lint
+    if: ${{ contains(github.event.head_commit.message, '[llm]') }}
+    runs-on: macos-15
+    timeout-minutes: 150
+    env:
+      MODELS: "qwen3:1.7b,qwen3:4b,gemma3:4b"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate Xcode project
+        run: |
+          which xcodegen || brew install xcodegen
+          xcodegen generate
+
+      - name: Build app (Debug)
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project Stickflow.xcodeproj \
+            -scheme Stickflow \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath build/DerivedData \
+            -quiet 2>&1 | tee build.log
+
+      - name: Start Ollama and pull the models
+        run: |
+          brew install ollama
+          (ollama serve > ollama.log 2>&1 &)
+          for attempt in $(seq 1 30); do curl -fsS http://127.0.0.1:11434/api/version && break; sleep 1; done
+          echo
+          pulled=""
+          for model in ${MODELS//,/ }; do
+            if ollama pull "$model"; then pulled="${pulled:+$pulled,}$model"; else echo "could not pull $model"; fi
+          done
+          ollama list
+          echo "PULLED=$pulled" >> "$GITHUB_ENV"
+
+      - name: Report
+        run: |
+          set -o pipefail
+          APP=build/DerivedData/Build/Products/Debug/Stickflow.app/Contents/MacOS/Stickflow
+          "$APP" --structure-report StickflowCore/Tests/StickflowCoreTests/StructuringFixtures/rules.json \
+            --models "$PULLED" 2>&1 | tee report.txt
+          grep -q "^REPORT Rules" report.txt
+

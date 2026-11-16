@@ -25,30 +25,53 @@ final class StructuringTests: XCTestCase {
         }
     }
 
-    func testFixturesKeepNamesAndStayShort() throws {
-        var names = 0
-        var keptNames = 0
-        var words = 0
-        var items = 0
+    func testRulesMeetTheBarOnTheGoldenSet() throws {
+        var score = StructuringScore()
         for fixture in try fixtures() {
             let plan = RuleStructurer.plan(from: fixture.input)
             XCTAssertEqual(plan, plan.normalized(), "the rules give a plan that is already within the limits")
-            let output = (plan.items.flatMap { [$0.text] + $0.children } + plan.sections.compactMap(\.heading)).joined(separator: " ")
-            // A capitalised word inside a sentence is a name; it must come through as it was said.
-            let tokens = RuleStructurer.tokenize(fixture.input)
-            for (index, token) in tokens.enumerated() where index > 0 {
-                guard let first = token.first, first.isUppercase, ![".", "!", "?", ":"].contains(tokens[index - 1]) else { continue }
-                names += 1
-                if output.contains(token) { keptNames += 1 }
-            }
-            for item in plan.items {
-                items += 1
-                words += item.text.split(separator: " ").count
-            }
+            score.record(input: fixture.input, expected: fixture.plan, plan: plan.isEmpty ? nil : plan, seconds: 0)
         }
-        XCTAssertGreaterThan(names, 10)
-        XCTAssertGreaterThanOrEqual(Double(keptNames) / Double(names), 0.95, "names kept: \(keptNames) of \(names)")
-        XCTAssertLessThanOrEqual(Double(words) / Double(items), 5, "an item is five words long at most on average")
+        XCTAssertEqual(score.answeredShare, 1)
+        XCTAssertEqual(score.countMatchShare, 1)
+        XCTAssertGreaterThan(score.mustKeep, 20)
+        // Spec 14, stage 3: names, numbers and times are kept in at least 95 % of cases.
+        XCTAssertGreaterThanOrEqual(score.keptShare, 0.95, "kept \(score.kept) of \(score.mustKeep)")
+        XCTAssertLessThanOrEqual(score.wordsPerItem, 5, "an item is five words long at most on average")
+    }
+
+    func testMetrics() {
+        XCTAssertEqual(
+            StructuringMetrics.mustKeep(in: "Потом в 11 созвон с Петей. Отправить 250 тысяч Олегу в 18.30, версия 2.1.3"),
+            ["11", "Петей", "250", "Олегу", "18.30", "2.1.3"]
+        )
+        let plan = NotePlan(title: "План", sections: [
+            NotePlan.Section(heading: "Олегу", items: [NotePlan.Item(text: "Созвониться с Петей", time: "11:00", children: ["в 18:30"])]),
+        ])
+        XCTAssertEqual(StructuringMetrics.kept(["11", "Петей", "250", "Олегу", "18.30", "2.1.3"], in: plan), 4)
+        let evening = NotePlan(title: "", sections: [NotePlan.Section(items: [NotePlan.Item(text: "Спортзал", time: "20:00")])])
+        XCTAssertEqual(StructuringMetrics.kept(["8", "9", "30"], in: evening), 1, "«в 8 вечера» is kept as 20:00")
+        let midnight = NotePlan(title: "", sections: [NotePlan.Section(items: [NotePlan.Item(text: "Пост", time: "00:00")])])
+        XCTAssertEqual(StructuringMetrics.kept(["12"], in: midnight), 1)
+
+        var score = StructuringScore()
+        XCTAssertEqual(score.keptShare, 1)
+        XCTAssertEqual(score.answeredShare, 0)
+        XCTAssertEqual(score.latency(percentile: 0.5), 0)
+        XCTAssertEqual(score.wordsPerItem, 0)
+        let expected = NotePlan(title: "", sections: [NotePlan.Section(items: [NotePlan.Item(text: "a")])])
+        score.record(input: "Созвон с Петей в 11", expected: expected, plan: plan, seconds: 2)
+        score.record(input: "Купить молоко", expected: expected, plan: nil, seconds: 9)
+        score.record(input: "Купить 3 пакета", expected: expected, plan: NotePlan(title: "", sections: []), seconds: 1)
+        XCTAssertEqual(score.cases, 3)
+        XCTAssertEqual(score.answered, 2)
+        XCTAssertEqual(score.countMatches, 1)
+        XCTAssertEqual(score.mustKeep, 3)
+        XCTAssertEqual(score.kept, 2)
+        XCTAssertEqual(score.wordsPerItem, 3)
+        XCTAssertEqual(score.latency(percentile: 0.5), 2)
+        XCTAssertEqual(score.latency(percentile: 0.95), 9)
+        XCTAssertEqual(score.countMatchShare, 1.0 / 3, accuracy: 0.0001)
     }
 
     // MARK: The rules one by one

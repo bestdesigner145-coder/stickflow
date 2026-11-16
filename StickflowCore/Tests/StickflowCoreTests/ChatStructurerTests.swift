@@ -95,6 +95,7 @@ final class ChatStructurerTests: XCTestCase {
         let sent = try body(request)
         XCTAssertEqual(sent["model"] as? String, "qwen3:4b")
         XCTAssertEqual(sent["stream"] as? Bool, false)
+        XCTAssertEqual(sent["think"] as? Bool, false)
         XCTAssertEqual((sent["options"] as? [String: Any])?["temperature"] as? Double, 0.2)
         XCTAssertEqual((sent["messages"] as? [[String: String]])?.map { $0["role"] ?? "" }, ["system", "user"])
         XCTAssertEqual((sent["format"] as? [String: Any])?["type"] as? String, "object")

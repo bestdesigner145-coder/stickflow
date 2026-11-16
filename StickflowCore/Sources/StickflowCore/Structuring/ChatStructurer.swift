@@ -66,7 +66,8 @@ public enum ChatProvider: Equatable, Sendable {
         switch self {
         case let .ollama(host, model):
             url = host.appendingPathComponent("api/chat")
-            body = ["model": model, "messages": turns, "stream": false, "options": ["temperature": 0.2]]
+            // "think": models that reason aloud first (qwen3) would take many times longer.
+            body = ["model": model, "messages": turns, "stream": false, "think": false, "options": ["temperature": 0.2]]
             if structured { body["format"] = schema }
         case let .openAICompatible(baseURL, model):
             url = baseURL.appendingPathComponent("v1/chat/completions")
