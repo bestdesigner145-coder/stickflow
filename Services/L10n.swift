@@ -45,6 +45,15 @@ enum L10n {
     static var dictationNothingHeard: String { String(localized: "dictation.error.nothing_heard") }
     static var dictationFailed: String { String(localized: "dictation.error.failed") }
 
+    static func cloudConsentTitle(provider: String) -> String {
+        String.localizedStringWithFormat(String(localized: "cloud.consent.title"), provider)
+    }
+
+    static var cloudConsentInfo: String { String(localized: "cloud.consent.info") }
+    static var cloudConsentContinue: String { String(localized: "cloud.consent.continue") }
+    static var cloudConsentCancel: String { String(localized: "cloud.consent.cancel") }
+    static var cloudConsentRemember: String { String(localized: "cloud.consent.remember") }
+
     static func dictationModelDownloading(percent: Int) -> String {
         String.localizedStringWithFormat(String(localized: "dictation.model_downloading"), percent)
     }

@@ -55,7 +55,7 @@ final class ModeToggleView: NSView {
     }
 
     /// Wide enough for both words in their bold form.
-    var fittingSize: NSSize {
+    var naturalSize: NSSize {
         let bold: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11, weight: .semibold)]
         let widths = titles.map { ceil(NSAttributedString(string: $0, attributes: bold).size().width) }
         return NSSize(width: widths[0] + Self.gap + widths[1], height: 16)
@@ -114,7 +114,7 @@ final class PaperTextButton: NSView {
         ])
     }
 
-    var fittingSize: NSSize {
+    var naturalSize: NSSize {
         let size = text.size()
         return NSSize(width: ceil(size.width), height: ceil(size.height) + 2)
     }

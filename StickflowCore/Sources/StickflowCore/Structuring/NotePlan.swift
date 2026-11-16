@@ -170,6 +170,10 @@ public enum StructurerError: Error, Equatable, Sendable {
     case nothingToDo
     case timedOut
     case invalidAnswer
+    /// The provider lacks something of the user's: a key, or the key was refused.
+    case notConfigured
+    /// The service answered with this HTTP status.
+    case serverError(Int)
 }
 
 /// Turns raw text into a plan (spec 8.1). The rules, a local model and the

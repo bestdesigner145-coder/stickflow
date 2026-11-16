@@ -15,7 +15,18 @@ final class EntryController: NSObject {
     private let displays: any ScreenGeometry
     private let stickers: StickerManager
     /// Takes dictated or typed text apart into a plan (spec 8).
-    var structurer: any Structurer
+    /// Built anew for every request, so that a change of settings applies at once.
+    private let makeStructurer: () -> any Structurer
+    private var structurerOverride: (any Structurer)?
+
+    /// The structurer of the moment. Setting it pins one, for the self-check.
+    var structurer: any Structurer {
+        get { structurerOverride ?? makeStructurer() }
+        set { structurerOverride = newValue }
+    }
+
+    /// Asks before text goes to a cloud provider (spec 8.1); replaced in tests.
+    var confirmCloud: @MainActor (String) -> (allowed: Bool, remember: Bool) = { CloudConsent.ask(provider: $0) }
     private let clock: any AppClock
     private var structuring: Task<Void, Never>?
 
@@ -43,11 +54,11 @@ final class EntryController: NSObject {
         preferences: Preferences,
         displays: any ScreenGeometry,
         stickers: StickerManager,
-        structurer: any Structurer,
+        makeStructurer: @escaping () -> any Structurer,
         dictation: Dictation,
         clock: any AppClock
     ) {
-        self.structurer = structurer
+        self.makeStructurer = makeStructurer
         self.clock = clock
         self.tuning = tuning
         self.preferences = preferences
@@ -399,6 +410,21 @@ final class EntryController: NSObject {
         draftRequest.ambiguousHoursAreAfternoon = tuning.rulesAssumeAfternoon
         let request = draftRequest
         let structurer = self.structurer
+        // Spec 8.1: nothing goes to a cloud provider before the user has said yes.
+        if !structurer.isLocal, !preferences.cloudConsent.contains(structurer.id) {
+            draft.keepsOpenWithoutFocus = true
+            let answer = confirmCloud(structurer.displayName)
+            draft.keepsOpenWithoutFocus = false
+            guard answer.allowed else {
+                clearPending()
+                draft.showWriting()
+                return
+            }
+            if answer.remember {
+                preferences.cloudConsent.append(structurer.id)
+                preferences.persist()
+            }
+        }
         let limit = structurer.isLocal ? tuning.structureTimeoutLocal : tuning.structureTimeoutCloud
         pending = .structuring(text)
         draft.showStructuring()

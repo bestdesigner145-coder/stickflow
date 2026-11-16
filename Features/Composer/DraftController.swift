@@ -508,7 +508,7 @@ final class DraftView: NSView {
     override func layout() {
         super.layout()
         let padding = Self.padding
-        let toggleSize = showsModeToggle ? modeToggle.fittingSize : .zero
+        let toggleSize = showsModeToggle ? modeToggle.naturalSize : .zero
         modeToggle.frame = NSRect(x: bounds.width - padding - toggleSize.width, y: 18, width: toggleSize.width, height: toggleSize.height)
         let titleWidth = bounds.width - padding * 2 - (showsModeToggle ? toggleSize.width + 8 : 0)
         titleLabel.frame = NSRect(x: padding, y: 10, width: max(titleWidth, 0), height: 30)
@@ -526,9 +526,9 @@ final class DraftView: NSView {
         microphone.frame = NSRect(x: padding - 4, y: iconY, width: iconSize, height: iconSize)
         stickButton.frame = NSRect(x: bounds.width - padding - iconSize + 4, y: iconY, width: iconSize, height: iconSize)
         spinner.frame = NSRect(x: padding, y: iconY + 5, width: 14, height: 14)
-        let retrySize = retryButton.fittingSize
+        let retrySize = retryButton.naturalSize
         retryButton.frame = NSRect(x: padding, y: iconY + 3, width: retrySize.width, height: retrySize.height)
-        let anywaySize = stickAnywayButton.fittingSize
+        let anywaySize = stickAnywayButton.naturalSize
         stickAnywayButton.frame = NSRect(
             x: bounds.width - padding - anywaySize.width,
             y: iconY + 3,

@@ -93,7 +93,11 @@ final class AppEnvironment {
             preferences: preferences,
             displays: displays,
             stickers: stickers,
-            structurer: RuleStructurer(),
+            // Tests and the self-check never touch the network: the rules only.
+            makeStructurer: { [preferences] in
+                if isScripted { return RuleStructurer() }
+                return StructurerFactory.make(from: preferences, network: URLSessionNetwork())
+            },
             dictation: Dictation(recorder: recorder, engine: speech, tuning: tuning),
             clock: clock
         )
