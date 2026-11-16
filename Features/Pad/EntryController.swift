@@ -300,7 +300,11 @@ final class EntryController: NSObject {
         guard let layout, !isSuppressed || newPhase == .idle else { return }
         let window = padWindowFrame(layout)
         let target = padOrigin(reach: reach(for: newPhase), in: window, side: layout.edge.side)
-        let tilt: CGFloat = newPhase == .peek ? CGFloat(tuning.padPeekRotation) * (layout.edge.side == .right ? 1 : -1) : 0
+        // With "Reduce motion" the pad neither travels nor turns: it is simply
+        // there, and only its shadow and the oval fade (spec 6.7).
+        let reduceMotion = tuning.reduceMotion
+        let peekTilt = CGFloat(tuning.padPeekRotation) * (layout.edge.side == .right ? 1 : -1)
+        let tilt: CGFloat = newPhase == .peek && !reduceMotion ? peekTilt : 0
         let base: Double = switch newPhase {
         case .idle: tuning.padHideDuration
         case .peek: tuning.padPeekDuration
@@ -327,7 +331,7 @@ final class EntryController: NSObject {
                 }
             }
         }
-        padContainer.slide(to: target, rotation: tilt, duration: duration, curve: .drawer)
+        padContainer.slide(to: target, rotation: tilt, duration: reduceMotion ? 0 : duration, curve: .drawer)
         padShadow.setOpacity(isOut ? Float(tuning.padShadowOpacity) : 0, duration: duration, curve: .drawer)
         glowView.fade(to: isOut ? 1 : 0, duration: duration, curve: .drawer)
         CATransaction.commit()
