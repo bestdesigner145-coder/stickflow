@@ -829,6 +829,7 @@ enum SelfCheck {
             entry.toggleDraft()
             await pause(0.3)
             check(draft.allowsAppend && !draft.rootView.modeToggle.isHidden, "with a sticker on screen the draft offers «Add to sticker»")
+            check(draft.isAppending == false, "a new sticker is the default")
             draft.rootView.modeToggle.isAppend = true
             write("Купить молоко, потом оплатить интернет")
             snapshotView(draft.rootView, name: "19-draft-append")

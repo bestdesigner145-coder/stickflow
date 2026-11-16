@@ -353,11 +353,10 @@ final class DraftView: NSView {
     let stickAnywayButton = PaperTextButton(title: L10n.draftStickAsIs)
     private let spinner = SpinnerView(frame: .zero)
 
+    /// "New / Add to sticker" is offered: there is a sticker to add to. It is
+    /// visible while the draft is being written and nothing else needs its place.
     var showsModeToggle = false {
-        didSet {
-            modeToggle.isHidden = !showsModeToggle
-            needsLayout = true
-        }
+        didSet { applyDictation() }
     }
 
     /// Seconds per turn of the spinner; 0 leaves it standing.
@@ -508,10 +507,7 @@ final class DraftView: NSView {
     override func layout() {
         super.layout()
         let padding = Self.padding
-        let toggleSize = showsModeToggle ? modeToggle.naturalSize : .zero
-        modeToggle.frame = NSRect(x: bounds.width - padding - toggleSize.width, y: 18, width: toggleSize.width, height: toggleSize.height)
-        let titleWidth = bounds.width - padding * 2 - (showsModeToggle ? toggleSize.width + 8 : 0)
-        titleLabel.frame = NSRect(x: padding, y: 10, width: max(titleWidth, 0), height: 30)
+        titleLabel.frame = NSRect(x: padding, y: 10, width: bounds.width - padding * 2, height: 30)
         let footerTop = bounds.height - Self.footerHeight
         let noteHeight = messageHeight(fittingWidth: bounds.width - padding * 2)
         scrollView.frame = NSRect(
@@ -536,6 +532,9 @@ final class DraftView: NSView {
             height: anywaySize.height
         )
         let statusX = microphone.frame.maxX + 6
+        // The toggle sits where the timer goes: the two are never there together.
+        let toggleSize = modeToggle.naturalSize
+        modeToggle.frame = NSRect(x: statusX, y: iconY + 4, width: toggleSize.width, height: toggleSize.height)
         statusLabel.frame = NSRect(x: statusX, y: iconY + 3, width: max(stickButton.frame.minX - 6 - statusX, 0), height: 18)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -565,6 +564,7 @@ final class DraftView: NSView {
             // A failure is shown once the dictation is over; a download, all the time.
             messageLabel.stringValue = (dictation.state == .idle ? dictation.message : nil) ?? dictation.notice ?? ""
         }
+        modeToggle.isHidden = !(showsModeToggle && phase == .writing && statusLabel.stringValue.isEmpty)
         microphone.isEnabled = dictation.state == .idle || isRecording
         microphone.setAccessibilityLabel(isRecording ? L10n.draftStopDictation : L10n.draftDictate)
         levelBar.isHidden = !isRecording

@@ -76,13 +76,14 @@ final class EntrySnapshotTests: XCTestCase {
     /// with the "New / Add to sticker" toggle.
     func testDraftPhases() {
         for theme in Self.themes {
-            for phase in ["structuring", "failed", "result"] {
+            for phase in ["writing", "structuring", "failed", "result"] {
                 let draft = DraftView(frame: NSRect(x: 0, y: 0, width: 232, height: 160))
                 draft.appearance = NSAppearance(named: theme.appearance)
                 draft.paper = .default
                 draft.showsModeToggle = true
                 draft.textView.string = "Сначала забрать посылку, потом оплатить интернет"
                 switch phase {
+                case "writing": draft.modeToggle.isAppend = true
                 case "structuring": draft.setPhase(.structuring)
                 case "failed": draft.setPhase(.failed)
                 default: draft.showResult(lines: ["План на сегодня", "☐ Забрать посылку", "☐ Оплатить интернет"])
