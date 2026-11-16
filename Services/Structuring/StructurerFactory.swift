@@ -10,8 +10,12 @@ import StickflowCore
 /// the user has chosen and the speech model's download (spec 0.8).
 struct URLSessionNetwork: Network {
     private static let session = URLSession(configuration: .ephemeral)
+    /// Seconds a request may take; the app's own limits (spec 8.1) are shorter.
+    var timeout: TimeInterval = 60
 
     func send(_ request: URLRequest) async throws -> (data: Data, status: Int) {
+        var request = request
+        request.timeoutInterval = timeout
         let (data, response) = try await Self.session.data(for: request)
         return (data, (response as? HTTPURLResponse)?.statusCode ?? 0)
     }

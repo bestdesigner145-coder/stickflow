@@ -44,7 +44,8 @@ enum StructureProbe {
         guard let server = URL(string: host) else { throw StructurerError.notConfigured }
         var structurers: [any Structurer] = [RuleStructurer()]
         for model in models {
-            structurers.append(ChatStructurer(provider: .ollama(host: server, model: model), network: URLSessionNetwork()))
+            // A CI runner has no GPU: an answer may take minutes there.
+            structurers.append(ChatStructurer(provider: .ollama(host: server, model: model), network: URLSessionNetwork(timeout: 300)))
         }
         say("GOLDEN SET: \(cases.count) cases")
         for structurer in structurers {

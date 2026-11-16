@@ -52,7 +52,8 @@ public enum StructurePrompt {
     static let format = """
     Ответь одним объектом JSON и больше ничем, без пояснений и без ```. Форма: \
     {"title": строка, "sections": [{"heading": строка или null, "items": [{"text": строка, "task": true или false, \
-    "time": "ЧЧ:ММ" или null, "children": [строки]}]}]}.
+    "time": "ЧЧ:ММ" или null, "children": [строки]}]}]}. \
+    children — только детали, названные в тексте; нет деталей — пустой список. Сам пункт в children не повторяй.
     """
 
     static let reminder = "Ответ не разобрался как JSON. Пришли только объект JSON в той же форме, без единого слова вокруг."
