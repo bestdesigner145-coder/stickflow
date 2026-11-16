@@ -83,7 +83,9 @@ final class EntrySnapshotTests: XCTestCase {
                 draft.showsModeToggle = true
                 draft.textView.string = "Сначала забрать посылку, потом оплатить интернет"
                 switch phase {
-                case "writing": draft.modeToggle.isAppend = true
+                case "writing":
+                    draft.modeToggle.isAppend = true
+                    draft.refresh()
                 case "structuring": draft.setPhase(.structuring)
                 case "failed": draft.setPhase(.failed)
                 default: draft.showResult(lines: ["План на сегодня", "☐ Забрать посылку", "☐ Оплатить интернет"])
