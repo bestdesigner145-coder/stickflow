@@ -20,7 +20,7 @@ public struct RuleStructurer: Structurer {
     public func health() async -> StructurerHealth { .ready }
 
     public func structure(_ request: StructureRequest) async throws -> NotePlan {
-        let plan = Self.plan(from: request.text, assumesAfternoon: request.ambiguousHoursAreAfternoon)
+        let plan = Self.plan(from: request.text, assumesAfternoon: request.ambiguousHoursAreAfternoon).cleaned()
         guard !plan.isEmpty else { throw StructurerError.nothingToDo }
         return plan
     }

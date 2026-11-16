@@ -42,14 +42,19 @@ public struct StructuringScore: Equatable, Sendable {
 
     /// The value below which `share` of the latencies fall, e.g. 0.5 and 0.95.
     public func latency(percentile share: Double) -> Double {
-        guard !latencies.isEmpty else { return 0 }
-        let sorted = latencies.sorted()
-        let index = Int((Double(sorted.count - 1) * min(max(share, 0), 1)).rounded())
-        return sorted[index]
+        StructuringMetrics.percentile(share, of: latencies)
     }
 }
 
 public enum StructuringMetrics {
+    /// The value below which `share` of `values` fall; 0 for no values.
+    public static func percentile(_ share: Double, of values: [Double]) -> Double {
+        guard !values.isEmpty else { return 0 }
+        let sorted = values.sorted()
+        let index = Int((Double(sorted.count - 1) * min(max(share, 0), 1)).rounded())
+        return sorted[index]
+    }
+
     /// What must come through exactly: capitalised words inside a sentence
     /// (names) and everything with a digit in it (numbers, times, versions).
     public static func mustKeep(in input: String) -> [String] {

@@ -274,44 +274,25 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 150
     env:
-      MODELS: "qwen3:1.7b,qwen3:4b,gemma3:4b"
+      # The command the author runs on his Mac (spec 18.3), on a runner without a
+      # GPU: a small model, the first phrases, and GigaChat to see that it loads.
+      MODELS: "qwen3:1.7b hf.co/ai-sage/GigaChat3.1-10B-A1.8B-GGUF:Q4_K_M"
+      LIMIT: "5"
+      OUT: report.md
     steps:
       - uses: actions/checkout@v4
 
-      - name: Generate Xcode project
-        run: |
-          which xcodegen || brew install xcodegen
-          xcodegen generate
-
-      - name: Build app (Debug)
-        run: |
-          set -o pipefail
-          xcodebuild build \
-            -project Stickflow.xcodeproj \
-            -scheme Stickflow \
-            -configuration Debug \
-            -destination 'platform=macOS' \
-            -derivedDataPath build/DerivedData \
-            -quiet 2>&1 | tee build.log
-
-      - name: Start Ollama and pull the models
-        run: |
-          brew install ollama
-          (ollama serve > ollama.log 2>&1 &)
-          for attempt in $(seq 1 30); do curl -fsS http://127.0.0.1:11434/api/version && break; sleep 1; done
-          echo
-          pulled=""
-          for model in ${MODELS//,/ }; do
-            if ollama pull "$model"; then pulled="${pulled:+$pulled,}$model"; else echo "could not pull $model"; fi
-          done
-          ollama list
-          echo "PULLED=$pulled" >> "$GITHUB_ENV"
-
       - name: Report
         run: |
-          set -o pipefail
-          APP=build/DerivedData/Build/Products/Debug/Stickflow.app/Contents/MacOS/Stickflow
-          "$APP" --structure-report StickflowCore/Tests/StickflowCoreTests/StructuringFixtures/rules.json \
-            --models "$PULLED" 2>&1 | tee report.txt
-          grep -q "^REPORT Rules" report.txt
+          printf 'Купить молоко и позвонить маме.\n\nПривет, проверка. По сайту: поправить шапку.\n' > phrases.txt
+          scripts/structure-report.sh phrases.txt
+          cat report.md
+          grep -q "^| Правила | 5/5" report.md
 
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: structure-report
+          path: report.md
+          if-no-files-found: ignore

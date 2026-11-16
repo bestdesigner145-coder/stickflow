@@ -42,7 +42,13 @@ final class ChatStructurerTests: XCTestCase {
 
     func testPromptHasTheRulesTheExamplesAndTheText() throws {
         let messages = StructurePrompt.messages(for: StructureRequest(text: "Купить молоко"))
-        XCTAssertEqual(messages.map(\.role), [.system, .user, .assistant, .user, .assistant, .user, .assistant, .user])
+        XCTAssertEqual(messages.count, 2 + 2 * StructurePrompt.examples.count)
+        XCTAssertEqual(Array(messages.map(\.role).prefix(3)), [.system, .user, .assistant])
+        XCTAssertEqual(messages.last?.role, .user)
+        // Spec 18.2: grouping by meaning, no repeats, no greetings.
+        XCTAssertTrue(messages[0].content.contains("Группируй по смыслу"))
+        XCTAssertTrue(messages[0].content.contains("не новый пункт"))
+        XCTAssertTrue(messages[0].content.contains("не задачи"))
         XCTAssertTrue(messages[0].content.contains("Один пункт — одно действие"))
         XCTAssertTrue(messages[0].content.contains("JSON"))
         XCTAssertEqual(messages.last?.content, "Купить молоко")
@@ -76,9 +82,15 @@ final class ChatStructurerTests: XCTestCase {
         let plan = try PlanParser.parse("Вот план:\n```json\n" + planJSON + "\n```\nГотово!")
         XCTAssertEqual(plan, NotePlan(title: "План", sections: [NotePlan.Section(items: [NotePlan.Item(text: "Купить молоко")])]))
         let blank = #"{"title":"x","sections":[{"heading":null,"items":[{"text":" ","task":true}]}]}"#
-        for bad in ["", "нет", "{}", "} {", #"{"title":"x","sections":[]}"#, blank] {
+        for bad in ["", "нет", "{}", "} {"] {
             XCTAssertThrowsError(try PlanParser.parse(bad), bad) { error in
                 XCTAssertEqual(error as? StructurerError, .invalidAnswer)
+            }
+        }
+        // A plan that is there and holds nothing: the model found nothing to do.
+        for empty in [#"{"title":"x","sections":[]}"#, blank] {
+            XCTAssertThrowsError(try PlanParser.parse(empty), empty) { error in
+                XCTAssertEqual(error as? StructurerError, .nothingToDo)
             }
         }
     }
@@ -97,6 +109,7 @@ final class ChatStructurerTests: XCTestCase {
         XCTAssertEqual(sent["stream"] as? Bool, false)
         XCTAssertEqual(sent["think"] as? Bool, false)
         XCTAssertEqual((sent["options"] as? [String: Any])?["temperature"] as? Double, 0.2)
+        XCTAssertEqual((sent["options"] as? [String: Any])?["num_ctx"] as? Int, 8192)
         XCTAssertEqual((sent["messages"] as? [[String: String]])?.map { $0["role"] ?? "" }, ["system", "user"])
         XCTAssertEqual((sent["format"] as? [String: Any])?["type"] as? String, "object")
         XCTAssertNil(try body(ollama.request(messages: messages, apiKey: nil, structured: false))["format"])
@@ -185,8 +198,9 @@ final class ChatStructurerTests: XCTestCase {
         let requests = await network.requests
         XCTAssertEqual(requests.count, 2)
         let turns = try XCTUnwrap(body(requests[1])["messages"] as? [[String: String]])
-        XCTAssertEqual(turns.count, 10, "the first answer and the reminder are added")
-        XCTAssertEqual(turns[8]["content"], "Сейчас подумаю")
+        let asked = 2 + 2 * StructurePrompt.examples.count
+        XCTAssertEqual(turns.count, asked + 2, "the first answer and the reminder are added")
+        XCTAssertEqual(turns[asked]["content"], "Сейчас подумаю")
 
         let stubborn = try ScriptedNetwork([(ollamaAnswer("нет"), 200), (ollamaAnswer("и снова нет"), 200)])
         do {
@@ -194,6 +208,33 @@ final class ChatStructurerTests: XCTestCase {
             XCTFail("two unreadable answers are a failure")
         } catch {
             XCTAssertEqual(error as? StructurerError, .invalidAnswer)
+        }
+    }
+
+    func testRepeatsAndGreetingsAreTakenOutOfAnAnswer() async throws {
+        let answer = #"{"title":"Карта","sections":[{"heading":null,"items":[{"text":"Привет","task":true},"#
+            + #"{"text":"Внести правки в карту","task":true},{"text":"Внести правки в виртуальную карту","task":true}]}]}"#
+        let network = try ScriptedNetwork([(ollamaAnswer(answer), 200), (ollamaAnswer(answer), 200)])
+        let structurer = ChatStructurer(provider: ollama, network: network)
+        let plan = try await structurer.structure(StructureRequest(text: "x"))
+        XCTAssertEqual(plan.items.map(\.text), ["Внести правки в виртуальную карту"])
+        let draft = try await structurer.draft(StructureRequest(text: "x"))
+        XCTAssertEqual(draft.items.count, 3, "the draft is the answer as it came")
+    }
+
+    func testNothingToDoIsNotAskedTwice() async throws {
+        let empty = #"{"title":"План на сегодня","sections":[]}"#
+        let greeting = #"{"title":"План","sections":[{"heading":null,"items":[{"text":"Привет","task":true}]}]}"#
+        for answer in [empty, greeting] {
+            let network = try ScriptedNetwork([(ollamaAnswer(answer), 200)])
+            do {
+                _ = try await ChatStructurer(provider: ollama, network: network).structure(StructureRequest(text: "Привет"))
+                XCTFail("there is nothing to do in a greeting")
+            } catch {
+                XCTAssertEqual(error as? StructurerError, .nothingToDo)
+            }
+            let requests = await network.requests
+            XCTAssertEqual(requests.count, 1)
         }
     }
 

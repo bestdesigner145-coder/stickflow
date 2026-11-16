@@ -22,6 +22,8 @@ public enum ChatProvider: Equatable, Sendable {
     public static let claudeDefaultModel = "claude-haiku-5-5"
     static let claudeEndpoint = "https://api.anthropic.com/v1/messages"
     static let claudeVersion = "2023-06-01"
+    /// Tokens of context asked of Ollama.
+    static let ollamaContext = 8192
 
     public var id: String {
         switch self {
@@ -67,7 +69,9 @@ public enum ChatProvider: Equatable, Sendable {
         case let .ollama(host, model):
             url = host.appendingPathComponent("api/chat")
             // "think": models that reason aloud first (qwen3) would take many times longer.
-            body = ["model": model, "messages": turns, "stream": false, "think": false, "options": ["temperature": 0.2]]
+            // "num_ctx": the rules and the examples alone do not fit a server's default window.
+            let options: [String: Any] = ["temperature": 0.2, "num_ctx": Self.ollamaContext]
+            body = ["model": model, "messages": turns, "stream": false, "think": false, "options": options]
             if structured { body["format"] = schema }
         case let .openAICompatible(baseURL, model):
             url = baseURL.appendingPathComponent("v1/chat/completions")
@@ -146,12 +150,21 @@ public struct ChatStructurer: Structurer {
     }
 
     public func structure(_ request: StructureRequest) async throws -> NotePlan {
+        let plan = try await draft(request).cleaned()
+        guard !plan.isEmpty else { throw StructurerError.nothingToDo }
+        return plan
+    }
+
+    /// The model's plan as it came, before repeats and greetings are taken out
+    /// (spec 18.2). The report counts the repeats in it.
+    public func draft(_ request: StructureRequest) async throws -> NotePlan {
         let messages = StructurePrompt.messages(for: request)
         let answer = try await ask(messages)
-        if let plan = try? PlanParser.parse(answer) {
-            return plan
+        do {
+            return try PlanParser.parse(answer)
+        } catch StructurerError.invalidAnswer {
+            return try await PlanParser.parse(ask(StructurePrompt.retry(messages, after: answer)))
         }
-        return try await PlanParser.parse(ask(StructurePrompt.retry(messages, after: answer)))
     }
 
     private func ask(_ messages: [ChatMessage]) async throws -> String {

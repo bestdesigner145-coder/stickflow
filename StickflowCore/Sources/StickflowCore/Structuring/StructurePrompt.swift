@@ -25,10 +25,17 @@ public enum StructurePrompt {
     public static let defaultRules = """
     Ты превращаешь надиктованный текст в короткий план задач. Стиль — «Пиши, сокращай» и Илья Бирман.
     — Выкинь слова-паразиты и вводные: короче, типа, условно, ну, вот, как бы, в общем, наверное, знаешь.
+    — Приветствия, проверка микрофона и слова про саму диктовку («привет», «раз-два», «меня слышно», «так, записываю», \
+    «нет, не то сказал») — не задачи. Выкинь их целиком и в пункты не вставляй.
     — Один пункт — одно действие. Начинай с глагола в инфинитиве: «Доделать», «Написать», «Созвониться».
+    — Одно действие — один пункт, сколько бы раз его ни назвали. Повтор, уточнение или поправка того же действия — \
+    не новый пункт: оставь один, самый точный.
     — Имена, названия, время и числа не меняй. Время пиши как 15:00 в поле time.
-    — Ничего не додумывай и не добавляй от себя. Нет действия — не создавай пункт.
-    — Группируй по проектам или темам, только если они названы. Нет темы — секция с heading: null.
+    — Ничего не додумывай и не добавляй от себя. Нет действия — не создавай пункт. Нет ни одного действия — sections пустой.
+    — Группируй по смыслу: всё про один продукт, экран, проект, человека или дом — в одну секцию с названием темы, \
+    даже если слова «проект» не было. Название темы бери из текста.
+    — Тема одна на весь текст — назови ею записку (title), секция одна, heading: null. Темы нет — тоже одна секция с heading: null.
+    — Не дроби: секция из одного пункта нужна, только если это отдельная тема.
     — Детали задачи — children по 1–4 слова.
     — «Если успею», «по возможности», «желательно» — отдельная секция «Если успею» в конце.
     — Заголовок — 1–3 слова. Неясно — «План на сегодня».
@@ -89,6 +96,18 @@ public enum StructurePrompt {
             {"heading":"Личное","items":[{"text":"Купить молоко","task":true,"time":null,"children":[]}]}]}
             """
         ),
+        // Spec 18.2: a greeting and words about the dictation are dropped, a refinement is
+        // not a second item, a topic is a group even when nobody called it a project.
+        (
+            "Привет, так, проверка, меня слышно? Значит, карта лояльности: надо поправить экран баланса, точнее поправить "
+                + "на экране баланса отступы, и заменить иконку бонусов. Заменить иконку бонусов на новую. И ещё заказать воду в офис",
+            """
+            {"title":"Карта лояльности","sections":[{"heading":"Карта лояльности","items":[\
+            {"text":"Поправить отступы на экране баланса","task":true,"time":null,"children":[]},\
+            {"text":"Заменить иконку бонусов","task":true,"time":null,"children":[]}]},\
+            {"heading":"Офис","items":[{"text":"Заказать воду","task":true,"time":null,"children":[]}]}]}
+            """
+        ),
     ]
 
     /// The whole conversation for a request: the rules, the examples, the text.
@@ -122,16 +141,19 @@ public enum StructurePrompt {
 
 /// Reads a model's answer as a plan (spec 8.3).
 public enum PlanParser {
-    /// - Throws: `StructurerError.invalidAnswer` when there is no plan in the answer.
+    /// - Throws: `StructurerError.invalidAnswer` when there is no plan in the answer,
+    ///   `StructurerError.nothingToDo` when the plan is there and has no items.
     public static func parse(_ answer: String) throws -> NotePlan {
         // Models like to wrap JSON in a code fence or a sentence: take the outermost object.
         guard let start = answer.firstIndex(of: "{"), let end = answer.lastIndex(of: "}"), start < end else {
             throw StructurerError.invalidAnswer
         }
         let json = Data(answer[start...end].utf8)
-        guard let plan = try? JSONDecoder().decode(NotePlan.self, from: json).normalized(), !plan.isEmpty else {
+        guard let plan = try? JSONDecoder().decode(NotePlan.self, from: json).normalized() else {
             throw StructurerError.invalidAnswer
         }
+        // A greeting or a microphone check alone: the model rightly found nothing to do.
+        guard !plan.isEmpty else { throw StructurerError.nothingToDo }
         return plan
     }
 }
