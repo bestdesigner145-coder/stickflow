@@ -19,7 +19,10 @@ final class AppEnvironment {
     let stickers: StickerManager
     /// The call zone, the pad and the draft (stage 2).
     let entry: EntryController
+    /// Whether the speech model is on this Mac (spec 18.1).
+    let speech: SpeechSetup
 
+    private var modelSetup: ModelSetupController?
     private var statusItem: StatusItemController?
     private var reportedErrors: Set<String> = []
     #if DEBUG
@@ -87,7 +90,19 @@ final class AppEnvironment {
         // Tests and the self-check have no microphone: they get a scripted one.
         let isScripted = options.isUITesting || options.selfCheckDirectory != nil
         let recorder: any VoiceRecorder = isScripted ? ScriptedRecorder() : MicrophoneRecorder()
-        let speech: any SpeechEngine = isScripted ? ScriptedSpeechEngine() : Self.makeSpeechEngine(idleUnload: tuning.speechModelIdleUnload)
+        // A run that must look the same everywhere does not ask which layout is on.
+        if isScripted { MarkupHint.forcedRussianLayout = false }
+        let engine: any SpeechEngine
+        let speech: SpeechSetup
+        if isScripted {
+            engine = ScriptedSpeechEngine()
+            speech = .ready()
+        } else {
+            let made = Self.makeSpeech(idleUnload: tuning.speechModelIdleUnload)
+            engine = made.engine
+            speech = made.setup
+        }
+        self.speech = speech
         entry = EntryController(
             tuning: tuning,
             preferences: preferences,
@@ -98,22 +113,29 @@ final class AppEnvironment {
                 if isScripted { return RuleStructurer() }
                 return StructurerFactory.make(from: preferences, network: URLSessionNetwork())
             },
-            dictation: Dictation(recorder: recorder, engine: speech, tuning: tuning),
+            dictation: Dictation(recorder: recorder, engine: engine, tuning: tuning),
+            // The same microphone and model, for dictation into a sticker (spec 18.4).
+            stickerDictation: Dictation(recorder: recorder, engine: engine, tuning: tuning),
+            speech: speech,
             clock: clock
         )
     }
 
     /// Settings that start empty and are never written to disk.
-    /// Spec 7: Russian, recognised on this Mac. GigaAM once its model has been
-    /// downloaded, Apple's recogniser until then and on macOS 14.
-    private static func makeSpeechEngine(idleUnload: TimeInterval) -> any SpeechEngine {
-        let apple = AppleSpeechEngine(locale: Locale(identifier: "ru-RU"))
+    /// Spec 7, 18.1: Russian, recognised on this Mac by GigaAM and by nothing
+    /// else. Until its model is here there is no dictation; on macOS 14 there is none at all.
+    private static func makeSpeech(idleUnload: TimeInterval) -> (engine: any SpeechEngine, setup: SpeechSetup) {
         guard let manifest = try? SpeechModelManifest.bundled(named: "gigaam-v3-e2e-rnnt"),
               let root = try? SpeechModelStore.defaultRoot() else {
-            return apple
+            return (NoSpeechEngine(), SpeechSetup(isSupported: false, isInstalled: false, megabytes: 0) { _ in })
         }
         let store = SpeechModelStore(manifest: manifest, root: root)
-        return SpeechRouter(primary: GigaAMEngine(store: store, idleUnload: idleUnload), fallback: apple)
+        let engine = GigaAMEngine(store: store, idleUnload: idleUnload)
+        let megabytes = Int(manifest.totalSize / 1_000_000)
+        let setup = SpeechSetup(isSupported: engine.isSupported, isInstalled: store.isInstalled, megabytes: megabytes) { progress in
+            try await engine.prepare(progress: progress)
+        }
+        return (engine, setup)
     }
 
     private static func throwawayDefaults() -> UserDefaults {
@@ -156,6 +178,10 @@ final class AppEnvironment {
             }
         )
         statusItem = StatusItemController(environment: self)
+        // Spec 18.1: the speech model is offered once, at the first launch.
+        let modelSetup = ModelSetupController(speech: speech, preferences: preferences)
+        self.modelSetup = modelSetup
+        modelSetup.offerIfNeeded()
     }
 
     // MARK: Debug panel

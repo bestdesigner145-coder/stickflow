@@ -630,40 +630,6 @@
         }
       }
     },
-    "dictation.error.recognition": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No access to speech recognition. Allow it in System Settings → Privacy & Security → Speech Recognition."
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Нет доступа к распознаванию речи. Разрешите его: Системные настройки → Конфиденциальность и безопасность → Распознавание речи."
-          }
-        }
-      }
-    },
-    "dictation.error.no_on_device": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This Mac can recognize Russian speech only through a server, and Stickflow never sends your voice anywhere. Turn on Dictation for Russian in System Settings → Keyboard → Dictation."
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Этот Mac распознаёт русскую речь только через сервер, а Stickflow голос в сеть не отправляет. Включите Диктовку для русского: Системные настройки → Клавиатура → Диктовка."
-          }
-        }
-      }
-    },
     "dictation.error.nothing_heard": {
       "extractionState": "manual",
       "localizations": {
@@ -694,23 +660,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Не получилось распознать. Попробуйте ещё раз."
-          }
-        }
-      }
-    },
-    "dictation.model_downloading": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Downloading the GigaAM speech recognition model: %lld%%. Once, 445 MB."
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Скачиваю модель распознавания речи GigaAM: %lld %%. Один раз, 445 МБ."
           }
         }
       }
@@ -800,40 +749,6 @@
         }
       }
     },
-    "draft.mode.new": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "New"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Новый"
-          }
-        }
-      }
-    },
-    "draft.mode.append": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Add to Sticker"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Дописать"
-          }
-        }
-      }
-    },
     "cloud.consent.title": {
       "extractionState": "manual",
       "localizations": {
@@ -915,6 +830,312 @@
           "stringUnit": {
             "state": "translated",
             "value": "Больше не спрашивать"
+          }
+        }
+      }
+    },
+    "hint.markup": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ heading · - point · %2$@ task"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ заголовок · - пункт · %2$@ задача"
+          }
+        }
+      }
+    },
+    "setup.close": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Готово"
+          }
+        }
+      }
+    },
+    "setup.download": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачать"
+          }
+        }
+      }
+    },
+    "setup.failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The download failed. Check the connection and try again."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не скачалось. Проверьте интернет и повторите."
+          }
+        }
+      }
+    },
+    "setup.hide": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скрыть"
+          }
+        }
+      }
+    },
+    "setup.info": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "To take dictation, Stickflow downloads the GigaAM model once — %lld MB. Speech is recognised on this Mac and is not sent anywhere."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Чтобы диктовать задачи, Stickflow один раз скачает модель GigaAM — %lld МБ. Речь распознаётся на этом Mac и никуда не отправляется."
+          }
+        }
+      }
+    },
+    "setup.later": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Later"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Позже"
+          }
+        }
+      }
+    },
+    "setup.later_note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can type without the model. It can be downloaded from the draft."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Без модели можно печатать. Скачать её можно из черновика."
+          }
+        }
+      }
+    },
+    "setup.progress": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloading… %lld%%"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачиваю… %lld %%"
+          }
+        }
+      }
+    },
+    "setup.ready": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ready. The microphone is in the draft by the pad."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Готово. Микрофон — в черновике у пачки."
+          }
+        }
+      }
+    },
+    "setup.retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try Again"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Повторить"
+          }
+        }
+      }
+    },
+    "setup.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speech recognition"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Распознавание речи"
+          }
+        }
+      }
+    },
+    "speech.download": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download recognition, %lld MB"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачать распознавание, %lld МБ"
+          }
+        }
+      }
+    },
+    "speech.preparing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Getting recognition ready… %lld%%"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Готовлю распознавание… %lld %%"
+          }
+        }
+      }
+    },
+    "speech.retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download failed. Try again"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не скачалось. Повторить"
+          }
+        }
+      }
+    },
+    "speech.unsupported": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dictation needs macOS 15"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Диктовка работает с macOS 15"
+          }
+        }
+      }
+    },
+    "sticker.dictate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dictate into this sticker"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Надиктовать в этот стикер"
+          }
+        }
+      }
+    },
+    "sticker.dictate.stop": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop recording"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Остановить запись"
           }
         }
       }

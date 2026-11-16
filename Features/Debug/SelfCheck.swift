@@ -550,6 +550,8 @@ enum SelfCheck {
                 check(stickers.controllers.last?.panel.isVisible == true, "the window appears where the picture landed")
                 check(stickers.effectsOverlay.spriteCount == 0 && !stickers.effectsOverlay.isVisible, "and the overlay is gone (\(stickers.effectsOverlay.spriteCount) left)")
                 check(!draft.isOpen, "sticking closes the draft")
+                // Nothing of the draft is left on screen: neither its window nor a picture of it (fix H6).
+                check(draft.rootView.window?.isVisible != true, "the draft's window is off the screen once it has closed")
                 check(NSApp.keyWindow == nil, "the keyboard goes back after the draft closes")
                 check(stickers.controllers.count == stickersBefore + 1, "the draft becomes a sticker")
                 if let stuck = stickers.controllers.last {
@@ -758,8 +760,40 @@ enum SelfCheck {
                 stickers.controllers.count == countBeforeVoice + 1 && stickers.controllers.last?.sticker.blocks.count == 6,
                 "and Return makes a plan of it (\(stickers.controllers.last?.sticker.blocks.count ?? -1) lines)"
             )
+            // Spec 18.4: the draft has a microphone and a tick, nothing else; a second
+            // dictation adds to what the first one left.
             entry.toggleDraft()
             await pause(0.3)
+            let draftView = entry.draft.rootView
+            check(draftView.showsMicrophone && draftView.setupButton.isHidden, "with the speech model here the draft shows the microphone")
+            voice.toggle()
+            await pause(0.3)
+            voice.toggle()
+            await pause(0.5)
+            let saidOnce = entry.draft.text
+            voice.toggle()
+            await pause(0.3)
+            voice.toggle()
+            await pause(0.5)
+            check(
+                !saidOnce.isEmpty && entry.draft.text.hasPrefix(saidOnce) && entry.draft.text.count > saidOnce.count,
+                "a second dictation adds to the same draft (\(entry.draft.text.count) characters after \(saidOnce.count))"
+            )
+
+            // Spec 18.1: until the speech model is on this Mac there is no microphone,
+            // only a line that says how far the download is.
+            environment.speech.setStateForTesting(.downloading(42))
+            check(!draftView.showsMicrophone && !draftView.setupButton.isHidden, "without the model the microphone gives way to the progress")
+            check(draftView.setupButton.title == L10n.speechPreparing(percent: 42), "it says «\(draftView.setupButton.title)»")
+            snapshotView(draftView, name: "17b-draft-preparing")
+            draftView.onMicrophone?()
+            await pause(0.2)
+            check(voice.state == .idle, "and nothing can be recorded meanwhile (\(voice.state))")
+            environment.speech.setStateForTesting(.missing)
+            check(draftView.setupButton.isLink, "a model nobody has asked for yet is offered as a word to click")
+            environment.speech.setStateForTesting(.ready)
+            check(draftView.showsMicrophone && draftView.setupButton.isHidden, "the microphone comes back when the model is ready")
+
             voice.toggle()
             await pause(0.3)
             entry.toggleDraft()
@@ -824,24 +858,42 @@ enum SelfCheck {
                 "Return on the result sticks it at once (\(planned?.sticker.blocks.map(\.text) ?? []))"
             )
 
-            // 18. "Add to sticker" (spec 4.3, 8.3): the lines go into the top sticker.
+            // 18. Dictation into a sticker (spec 18.4): the microphone on the glue strip
+            // of a sticker that is being edited adds what was said to that sticker.
             countBefore = stickers.controllers.count
-            entry.toggleDraft()
-            await pause(0.3)
-            check(draft.allowsAppend && !draft.rootView.modeToggle.isHidden, "with a sticker on screen the draft offers «Add to sticker»")
-            check(draft.isAppending == false, "a new sticker is the default")
-            draft.rootView.modeToggle.isAppend = true
-            write("Купить молоко, потом оплатить интернет")
-            snapshotView(draft.rootView, name: "19-draft-append")
-            draft.submit()
-            await pause(previewDuration + 0.8)
-            let grown = stickers.controllers.last
-            check(stickers.controllers.count == countBefore && !draft.isOpen, "no new sticker appears")
-            check(
-                grown?.sticker.blocks.map(\.text) == ["Забрать посылку", "Оплатить интернет", "Купить молоко"],
-                "the top sticker gets the new line and nothing twice (\(grown?.sticker.blocks.map(\.text) ?? []))"
-            )
-            if let grown { snapshot(grown, name: "19b-appended") }
+            if let target = stickers.controllers.last, let stickerVoice = entry.voice {
+                let microphone = target.rootView.microphone
+                check(microphone.button.isHidden, "at rest a sticker shows no microphone")
+                target.beginEditing(at: nil)
+                await pause(0.2)
+                check(!microphone.button.isHidden, "while it is edited its glue strip carries a microphone")
+                microphone.onClick?()
+                await pause(0.4)
+                check(microphone.state == .recording, "pressing it starts a recording (\(microphone.state))")
+                snapshot(target, name: "19-sticker-recording")
+                microphone.onClick?()
+                await pause(1.2)
+                check(microphone.state == .idle && !stickerVoice.isBusy, "pressing it again stops (\(microphone.state))")
+                let texts = target.sticker.blocks.map(\.text)
+                check(stickers.controllers.count == countBefore, "no new sticker appears")
+                check(
+                    Array(texts.prefix(2)) == ["Забрать посылку", "Оплатить интернет"] && texts.contains("Доделать экран кошелька"),
+                    "what was said joins the sticker's own lines (\(texts))"
+                )
+                microphone.onClick?()
+                await pause(0.3)
+                entry.toggleDraft()
+                await pause(0.3)
+                check(microphone.state == .idle && !stickerVoice.isBusy, "opening the draft takes the microphone away from the sticker")
+                entry.toggleDraft()
+                await pause(0.3)
+                target.endEditing()
+                await pause(0.2)
+                check(microphone.button.isHidden, "the microphone leaves with the editing")
+                snapshot(target, name: "19b-appended")
+            } else {
+                check(false, "there is a sticker to dictate into")
+            }
         }
 
         // MARK: Snapshots

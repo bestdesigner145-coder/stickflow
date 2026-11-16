@@ -13,23 +13,35 @@ struct AudioBuffer16k: Sendable, Equatable {
 
 enum SpeechError: Error, Equatable {
     case microphoneDenied
-    case recognitionDenied
-    /// This Mac can recognise the language only by sending the sound to a
-    /// server, and Stickflow does not send it (spec 0.8).
-    case noOnDeviceModel
+    /// The speech model is not on this Mac, or this macOS cannot run it.
     case unavailable
     case nothingHeard
     case failed(String)
 }
 
-/// Turns speech into text (spec 7). GigaAM and Apple's recogniser both sit
-/// behind this, and tests replace it.
+/// Turns speech into text (spec 7). GigaAM sits behind this, and tests replace it.
 protocol SpeechEngine: Sendable {
     var id: String { get }
+    /// The model is on this Mac; the microphone may be offered (spec 18.1).
     var isReady: Bool { get }
-    /// Asks for what the engine needs: a permission, a model to download.
+    /// Gets the engine ready to listen: downloads its model if it is not here
+    /// yet, loads it into memory.
     func prepare(progress: @escaping @Sendable (Double) -> Void) async throws
     func transcribe(_ audio: AudioBuffer16k) async throws -> String
+}
+
+/// No dictation at all: the app was built without the model's manifest.
+struct NoSpeechEngine: SpeechEngine {
+    let id = "none"
+    let isReady = false
+
+    func prepare(progress: @escaping @Sendable (Double) -> Void) async throws {
+        throw SpeechError.unavailable
+    }
+
+    func transcribe(_ audio: AudioBuffer16k) async throws -> String {
+        throw SpeechError.unavailable
+    }
 }
 
 /// The microphone, behind a protocol so that tests need none.

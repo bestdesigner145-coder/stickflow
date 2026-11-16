@@ -222,6 +222,9 @@ struct TuningPanelView: View {
                 onChange: onTuningChange
             )
             SliderRow(title: "Halo radius, pt", value: $tuning.haloRadius, range: 0...300, onChange: onTuningChange)
+            SliderRow(title: "Pad shadow radius, pt", value: $tuning.padShadowRadius, range: 0...32, onChange: onTuningChange)
+            SliderRow(title: "Pad shadow opacity", value: $tuning.padShadowOpacity, range: 0...0.5, onChange: onTuningChange)
+            SliderRow(title: "Pad oval opacity", value: $tuning.padGlowOpacity, range: 0...0.3, onChange: onTuningChange)
             SliderRow(title: "Halo: full fade within, pt", value: $tuning.haloCore, range: 0...120, onChange: onTuningChange)
             SliderRow(title: "Fade out, s", value: $tuning.fadeOutDuration, range: 0...0.6, onChange: onTuningChange)
             SliderRow(title: "Fade in, s", value: $tuning.fadeInDuration, range: 0...0.6, onChange: onTuningChange)

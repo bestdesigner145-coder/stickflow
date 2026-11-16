@@ -35,13 +35,9 @@ enum L10n {
     static var draftFailed: String { String(localized: "draft.failed") }
     static var draftStickAsIs: String { String(localized: "draft.failed.stick") }
     static var draftRetry: String { String(localized: "draft.failed.retry") }
-    static var draftModeNew: String { String(localized: "draft.mode.new") }
-    static var draftModeAppend: String { String(localized: "draft.mode.append") }
 
     static var dictationListening: String { String(localized: "dictation.listening") }
     static var dictationNoMicrophone: String { String(localized: "dictation.error.microphone") }
-    static var dictationNoRecognition: String { String(localized: "dictation.error.recognition") }
-    static var dictationNoOnDeviceModel: String { String(localized: "dictation.error.no_on_device") }
     static var dictationNothingHeard: String { String(localized: "dictation.error.nothing_heard") }
     static var dictationFailed: String { String(localized: "dictation.error.failed") }
 
@@ -54,9 +50,43 @@ enum L10n {
     static var cloudConsentCancel: String { String(localized: "cloud.consent.cancel") }
     static var cloudConsentRemember: String { String(localized: "cloud.consent.remember") }
 
-    static func dictationModelDownloading(percent: Int) -> String {
-        String.localizedStringWithFormat(String(localized: "dictation.model_downloading"), percent)
+    /// The speech model (spec 18.1).
+    static func speechPreparing(percent: Int) -> String {
+        String.localizedStringWithFormat(String(localized: "speech.preparing"), percent)
     }
+
+    static func speechDownload(megabytes: Int) -> String {
+        String.localizedStringWithFormat(String(localized: "speech.download"), megabytes)
+    }
+
+    static var speechRetry: String { String(localized: "speech.retry") }
+    static var speechUnsupported: String { String(localized: "speech.unsupported") }
+
+    static var setupTitle: String { String(localized: "setup.title") }
+    static func setupInfo(megabytes: Int) -> String {
+        String.localizedStringWithFormat(String(localized: "setup.info"), megabytes)
+    }
+
+    static var setupDownload: String { String(localized: "setup.download") }
+    static var setupLater: String { String(localized: "setup.later") }
+    static var setupHide: String { String(localized: "setup.hide") }
+    static var setupClose: String { String(localized: "setup.close") }
+    static var setupRetry: String { String(localized: "setup.retry") }
+    static func setupProgress(percent: Int) -> String {
+        String.localizedStringWithFormat(String(localized: "setup.progress"), percent)
+    }
+
+    static var setupReady: String { String(localized: "setup.ready") }
+    static var setupFailed: String { String(localized: "setup.failed") }
+    static var setupLaterNote: String { String(localized: "setup.later_note") }
+
+    /// "## heading · - point · [] task" under the placeholder (spec 18.5).
+    static func markupHint(heading: String, task: String) -> String {
+        String.localizedStringWithFormat(String(localized: "hint.markup"), heading, task)
+    }
+
+    static var stickerDictate: String { String(localized: "sticker.dictate") }
+    static var stickerStopDictation: String { String(localized: "sticker.dictate.stop") }
 
     static var toastPeeledOne: String { String(localized: "toast.peeled_one") }
     static var toastRestore: String { String(localized: "toast.restore") }

@@ -75,7 +75,6 @@ targets:
         # Asked for at the first press of the microphone in the draft (spec 7).
         # Russian texts are in Resources/InfoPlist.xcstrings.
         NSMicrophoneUsageDescription: "Stickflow records your voice only while the microphone in the draft is on, to turn it into task text. The recording is not kept."
-        NSSpeechRecognitionUsageDescription: "Stickflow recognizes what you dictate on this Mac, without sending it anywhere."
         NSHumanReadableCopyright: "Stickflow contributors. Free software under GPL-3.0."
     settings:
       base:

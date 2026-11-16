@@ -86,6 +86,8 @@ final class Preferences {
     var claudeModel: String
     /// Providers the user allowed to receive text without being asked each time.
     var cloudConsent: [String]
+    /// The first-launch step that offers the speech model has been shown (spec 18.1).
+    var speechModelOffered: Bool
 
     @ObservationIgnored private let defaults: UserDefaults
 
@@ -112,6 +114,7 @@ final class Preferences {
         static let openAIModel = "openAIModel"
         static let claudeModel = "claudeModel"
         static let cloudConsent = "cloudConsent"
+        static let speechModelOffered = "speechModelOffered"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -154,6 +157,7 @@ final class Preferences {
         openAIModel = defaults.string(forKey: Key.openAIModel) ?? ""
         claudeModel = defaults.string(forKey: Key.claudeModel) ?? ChatProvider.claudeDefaultModel
         cloudConsent = defaults.stringArray(forKey: Key.cloudConsent) ?? []
+        speechModelOffered = defaults.bool(forKey: Key.speechModelOffered)
     }
 
     /// Writes the current values to `UserDefaults`, clamping numbers to their valid range.
@@ -185,6 +189,7 @@ final class Preferences {
         defaults.set(openAIModel, forKey: Key.openAIModel)
         defaults.set(claudeModel, forKey: Key.claudeModel)
         defaults.set(cloudConsent, forKey: Key.cloudConsent)
+        defaults.set(speechModelOffered, forKey: Key.speechModelOffered)
     }
 
     private static func clamp(_ value: Double, to range: ClosedRange<Double>) -> Double {

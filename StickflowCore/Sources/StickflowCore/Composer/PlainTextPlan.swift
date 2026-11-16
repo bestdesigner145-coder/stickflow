@@ -26,8 +26,12 @@ public enum PlainTextPlan {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
         guard lines.count == 1, let only = lines.first else { return lines.count > 1 }
-        return ["- ", "[] ", "[ ] ", "[x] ", "## "].contains { only.hasPrefix($0) }
+        return marker(in: only) != nil
     }
+
+    /// "[] " typed on a Russian layout. The sticker's editor knows the keys by
+    /// their place; plain text has only the letters, and "хъ" is not a word.
+    static let russianTodoPrefix = "хъ "
 
     /// - Parameter plainLineKind: what a line without a marker becomes. A sticker
     ///   is a list of things to do, so the default is a task.
@@ -63,6 +67,10 @@ public enum PlainTextPlan {
     /// The block shortcut `line` starts with and the text after it. The trailing
     /// space of a marker may have been trimmed away ("-" for "- ").
     private static func marker(in line: String) -> (match: BlockShortcut.Match, content: String)? {
+        if line.lowercased().hasPrefix(russianTodoPrefix) {
+            let rest = String(line.dropFirst(russianTodoPrefix.count)).trimmingCharacters(in: .whitespaces)
+            return (BlockShortcut.Match(kind: .todo, done: false, prefixLength: russianTodoPrefix.utf16.count), rest)
+        }
         guard let match = BlockShortcut.match(in: line) ?? BlockShortcut.match(in: line + " ") else { return nil }
         let rest = String(line.utf16.dropFirst(match.prefixLength)) ?? ""
         return (match, rest.trimmingCharacters(in: .whitespaces))

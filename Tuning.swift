@@ -110,6 +110,12 @@ final class Tuning {
     var padPeekDuration: Double = 0.18
     var padOpenDuration: Double = 0.22
     var padHideDuration: Double = 0.16
+    /// The pad's shadow: wide and faint (fix H5).
+    var padShadowRadius: Double = 20
+    var padShadowOpacity: Double = 0.2
+    var padShadowOffset: Double = 6
+    /// Opacity in the middle of the oval behind the pad.
+    var padGlowOpacity: Double = 0.1
 
     // MARK: Draft (4.3)
 

@@ -3,83 +3,8 @@
 
 import AppKit
 
-/// "New / Add to sticker" in the draft's corner (spec 4.3). Shown only while
-/// there is a sticker to add to.
-final class ModeToggleView: NSView {
-    /// False: a new sticker. True: the lines go into the top sticker.
-    var isAppend = false {
-        didSet {
-            guard isAppend != oldValue else { return }
-            needsDisplay = true
-            setAccessibilityValue(isAppend ? titles[1] : titles[0])
-            onChange?()
-        }
-    }
-
-    var onChange: (() -> Void)?
-
-    var tint = NSColor.labelColor {
-        didSet { needsDisplay = true }
-    }
-
-    private let titles = [L10n.draftModeNew, L10n.draftModeAppend]
-    private static let gap: CGFloat = 10
-    private var splitX: CGFloat = 0
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        setAccessibilityElement(true)
-        setAccessibilityRole(.radioGroup)
-        setAccessibilityValue(titles[0])
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) is not supported")
-    }
-
-    override var isFlipped: Bool { true }
-
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-
-    private func text(_ index: Int) -> NSAttributedString {
-        let isActive = (index == 1) == isAppend
-        var attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 11, weight: isActive ? .semibold : .regular),
-            .foregroundColor: tint.withAlphaComponent(isActive ? 0.85 : 0.42),
-        ]
-        if isActive {
-            attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
-        }
-        return NSAttributedString(string: titles[index], attributes: attributes)
-    }
-
-    /// Wide enough for both words in their bold form.
-    var naturalSize: NSSize {
-        let bold: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11, weight: .semibold)]
-        let widths = titles.map { ceil(NSAttributedString(string: $0, attributes: bold).size().width) }
-        return NSSize(width: widths[0] + Self.gap + widths[1], height: 16)
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let bold: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11, weight: .semibold)]
-        let firstWidth = ceil(NSAttributedString(string: titles[0], attributes: bold).size().width)
-        text(0).draw(at: NSPoint(x: 0, y: 1))
-        text(1).draw(at: NSPoint(x: firstWidth + Self.gap, y: 1))
-        splitX = firstWidth + Self.gap / 2
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        isAppend = convert(event.locationInWindow, from: nil).x > splitX
-    }
-
-    override func accessibilityPerformPress() -> Bool {
-        isAppend.toggle()
-        return true
-    }
-}
-
-/// A word to click, written on the paper: "Stick", "Try again".
+/// A word to click, written on the paper: "Stick", "Try again". Without the
+/// underline it is a plain line of status and takes no clicks.
 final class PaperTextButton: NSView {
     var onClick: (() -> Void)?
 
@@ -87,7 +12,17 @@ final class PaperTextButton: NSView {
         didSet { needsDisplay = true }
     }
 
-    private let title: String
+    private(set) var title: String
+    private(set) var isLink = true
+
+    func set(title: String, isLink: Bool) {
+        guard title != self.title || isLink != self.isLink else { return }
+        self.title = title
+        self.isLink = isLink
+        setAccessibilityLabel(title)
+        setAccessibilityRole(isLink ? .button : .staticText)
+        needsDisplay = true
+    }
 
     init(title: String) {
         self.title = title
@@ -107,11 +42,12 @@ final class PaperTextButton: NSView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     private var text: NSAttributedString {
-        NSAttributedString(string: title, attributes: [
-            .font: NSFont.systemFont(ofSize: 12, weight: .medium),
+        var attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 12, weight: isLink ? .medium : .regular),
             .foregroundColor: tint,
-            .underlineStyle: NSUnderlineStyle.single.rawValue,
-        ])
+        ]
+        if isLink { attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue }
+        return NSAttributedString(string: title, attributes: attributes)
     }
 
     var naturalSize: NSSize {
@@ -120,14 +56,17 @@ final class PaperTextButton: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        text.draw(at: NSPoint(x: 0, y: 1))
+        // Cut with an ellipsis rather than run under what stands next to it.
+        let rect = NSRect(x: 0, y: 1, width: bounds.width, height: bounds.height)
+        text.draw(with: rect, options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }
 
     override func mouseDown(with event: NSEvent) {
-        onClick?()
+        if isLink { onClick?() }
     }
 
     override func accessibilityPerformPress() -> Bool {
+        guard isLink else { return false }
         onClick?()
         return true
     }

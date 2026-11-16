@@ -31,11 +31,14 @@ final class DraftController: NSObject, NSTextViewDelegate {
 
     /// Voice into the draft (spec 7).
     let dictation: Dictation
+    /// Whether the speech model is on this Mac; no microphone until it is (spec 18.1).
+    let speech: SpeechSetup
 
-    init(tuning: Tuning, preferences: Preferences, dictation: Dictation) {
+    init(tuning: Tuning, preferences: Preferences, dictation: Dictation, speech: SpeechSetup) {
         self.tuning = tuning
         self.preferences = preferences
         self.dictation = dictation
+        self.speech = speech
         rootView = DraftView(frame: NSRect(x: 0, y: 0, width: 232, height: 160))
         super.init()
         panel.contentView = rootView
@@ -54,7 +57,13 @@ final class DraftController: NSObject, NSTextViewDelegate {
         rootView.retryButton.onClick = { [weak self] in self?.onRetry?() }
         rootView.stickAnywayButton.onClick = { [weak self] in self?.onStickAnyway?() }
         rootView.textView.onUndo = { [weak self] in self?.onUndoResult?() ?? false }
-        rootView.onMicrophone = { [weak self] in self?.dictation.toggle() }
+        rootView.onMicrophone = { [weak self] in
+            guard let self, self.speech.isReady else { return }
+            self.dictation.toggle()
+        }
+        // "Download" and "Try again" under the text: the user's own word (spec 0.8).
+        rootView.onSpeechSetup = { [weak self] in self?.speech.start() }
+        speech.observe { [weak self] in self?.speechDidChange() }
         rootView.textView.onSpace = { [weak self] in
             // Space stops a recording instead of typing a space (spec 4.3).
             guard let self, self.dictation.state == .recording else { return false }
@@ -109,6 +118,11 @@ final class DraftController: NSObject, NSTextViewDelegate {
         panel.frame
     }
 
+    private func speechDidChange() {
+        rootView.speech = speech.state
+        if isOpen { layoutPanel() }
+    }
+
     private func dictationDidChange() {
         // The permission dialogs take the keyboard; the draft must outlive them.
         let wasWaiting = keepsOpenWithoutFocus
@@ -118,7 +132,6 @@ final class DraftController: NSObject, NSTextViewDelegate {
             elapsed: dictation.elapsed,
             level: dictation.level,
             message: dictation.message,
-            notice: dictation.modelProgress.map { L10n.dictationModelDownloading(percent: Int($0 * 100)) },
             isEnding: DictationClock.isEnding(elapsed: dictation.elapsed, limit: tuning.dictationLimit, warning: tuning.dictationWarning)
         )
         guard isOpen else { return }
@@ -161,8 +174,8 @@ final class DraftController: NSObject, NSTextViewDelegate {
 
         dictation.cancel()
         rootView.setPhase(.writing)
-        rootView.modeToggle.isAppend = false
-        rootView.showsModeToggle = allowsAppend
+        rootView.speechMegabytes = speech.megabytes
+        rootView.speech = speech.state
         rootView.paper = preferences.defaultColor
         rootView.pulseDuration = tuning.reduceMotion ? 0 : tuning.scaled(tuning.dictationPulseDuration)
         rootView.textView.string = ""
@@ -196,12 +209,6 @@ final class DraftController: NSObject, NSTextViewDelegate {
     var onStickAnyway: (() -> Void)?
     /// ⌘Z while the result is shown; true means the original text came back.
     var onUndoResult: (() -> Bool)?
-
-    /// Whether there is a sticker to add to; decides if the mode toggle is shown.
-    var allowsAppend = false
-
-    /// True when the lines are to go into the top sticker (spec 4.3, "Дописать").
-    var isAppending: Bool { allowsAppend && rootView.modeToggle.isAppend }
 
     var phase: DraftView.Phase { rootView.phase }
 
@@ -327,6 +334,8 @@ final class DraftView: NSView {
     let textView = DraftTextView(frame: .zero)
     let stickButton = HandIconButton(icon: .check, label: L10n.draftStick)
     private let microphone = HandIconButton(icon: .microphone, label: L10n.draftDictate)
+    /// The microphone is offered: the speech model is on this Mac (spec 18.1).
+    var showsMicrophone: Bool { !microphone.isHidden }
     private let titleLabel = NSTextField(labelWithString: "")
     /// The timer while recording, "Listening…" while recognising.
     private let statusLabel = NSTextField(labelWithString: "")
@@ -348,16 +357,25 @@ final class DraftView: NSView {
     }
 
     private(set) var phase = Phase.writing
-    let modeToggle = ModeToggleView(frame: .zero)
     let retryButton = PaperTextButton(title: L10n.draftRetry)
     let stickAnywayButton = PaperTextButton(title: L10n.draftStickAsIs)
     private let spinner = SpinnerView(frame: .zero)
 
-    /// "New / Add to sticker" is offered: there is a sticker to add to. It is
-    /// visible while the draft is being written and nothing else needs its place.
-    var showsModeToggle = false {
-        didSet { applyDictation() }
+    /// In the microphone's place until the speech model is on this Mac (spec 18.1):
+    /// "Getting recognition ready… 42 %", or a word to click that starts the download.
+    let setupButton = PaperTextButton(title: "")
+    var onSpeechSetup: (() -> Void)?
+
+    var speech = SpeechSetup.State.ready {
+        didSet {
+            guard speech != oldValue else { return }
+            applyPhase()
+            needsLayout = true
+        }
     }
+
+    /// Megabytes of the speech model, for "Download".
+    var speechMegabytes = 0
 
     /// Seconds per turn of the spinner; 0 leaves it standing.
     var spinnerPeriod: TimeInterval = 0
@@ -387,7 +405,15 @@ final class DraftView: NSView {
         let isWriting = phase == .writing
         textView.isEditable = isWriting
         textView.alphaValue = phase == .structuring ? 0.45 : 1
-        microphone.isHidden = !isWriting
+        microphone.isHidden = !(isWriting && speech == .ready)
+        setupButton.isHidden = !(isWriting && speech != .ready)
+        switch speech {
+        case .ready: break
+        case .missing: setupButton.set(title: L10n.speechDownload(megabytes: speechMegabytes), isLink: true)
+        case let .downloading(percent): setupButton.set(title: L10n.speechPreparing(percent: percent), isLink: false)
+        case .failed: setupButton.set(title: L10n.speechRetry, isLink: true)
+        case .unsupported: setupButton.set(title: L10n.speechUnsupported, isLink: false)
+        }
         stickButton.isHidden = phase == .failed
         stickButton.icon = phase == .structuring ? .stop : .check
         stickButton.setAccessibilityLabel(phase == .structuring ? L10n.draftStop : L10n.draftStick)
@@ -460,16 +486,17 @@ final class DraftView: NSView {
         levelBar.isHidden = true
         layer?.addSublayer(levelBar)
 
-        modeToggle.isHidden = true
+        setupButton.isHidden = true
+        setupButton.onClick = { [weak self] in self?.onSpeechSetup?() }
         retryButton.isHidden = true
         stickAnywayButton.isHidden = true
         spinner.isHidden = true
 
         addSubview(titleLabel)
-        addSubview(modeToggle)
         addSubview(scrollView)
         addSubview(messageLabel)
         addSubview(microphone)
+        addSubview(setupButton)
         addSubview(spinner)
         addSubview(statusLabel)
         addSubview(retryButton)
@@ -499,8 +526,9 @@ final class DraftView: NSView {
         }
         container.containerSize = NSSize(width: textWidth, height: .greatestFiniteMagnitude)
         manager.ensureLayout(for: container)
-        let textHeight = ceil(manager.usedRect(for: container).height) + textView.textContainerInset.height * 2
-        // Room for the placeholder's two lines while the draft is empty.
+        var textHeight = ceil(manager.usedRect(for: container).height) + textView.textContainerInset.height * 2
+        // Room for the placeholder and the line about headings, points and tasks while the draft is empty.
+        if textView.string.isEmpty { textHeight = max(textHeight, textView.emptyHeight(fittingWidth: textWidth)) }
         return Self.headerHeight + max(textHeight, 44) + messageHeight(fittingWidth: textWidth) + Self.footerHeight
     }
 
@@ -532,9 +560,9 @@ final class DraftView: NSView {
             height: anywaySize.height
         )
         let statusX = microphone.frame.maxX + 6
-        // The toggle sits where the timer goes: the two are never there together.
-        let toggleSize = modeToggle.naturalSize
-        modeToggle.frame = NSRect(x: statusX, y: iconY + 4, width: toggleSize.width, height: toggleSize.height)
+        // In the microphone's place, as wide as the footer allows.
+        let setupWidth = min(setupButton.naturalSize.width + 2, max(stickButton.frame.minX - 6 - padding, 0))
+        setupButton.frame = NSRect(x: padding, y: iconY + 4, width: setupWidth, height: 18)
         statusLabel.frame = NSRect(x: statusX, y: iconY + 3, width: max(stickButton.frame.minX - 6 - statusX, 0), height: 18)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -561,10 +589,9 @@ final class DraftView: NSView {
         if phase == .failed {
             messageLabel.stringValue = L10n.draftFailed
         } else {
-            // A failure is shown once the dictation is over; a download, all the time.
-            messageLabel.stringValue = (dictation.state == .idle ? dictation.message : nil) ?? dictation.notice ?? ""
+            // A failure is shown once the dictation is over.
+            messageLabel.stringValue = (dictation.state == .idle ? dictation.message : nil) ?? ""
         }
-        modeToggle.isHidden = !(showsModeToggle && phase == .writing && statusLabel.stringValue.isEmpty)
         microphone.isEnabled = dictation.state == .idle || isRecording
         microphone.setAccessibilityLabel(isRecording ? L10n.draftStopDictation : L10n.draftDictate)
         levelBar.isHidden = !isRecording
@@ -604,7 +631,7 @@ final class DraftView: NSView {
         // Spec 7: the timer turns red before the limit.
         statusLabel.textColor = isRecording && dictation.isEnding ? .systemRed : paper.textColor(alpha: 0.72)
         messageLabel.textColor = paper.textColor(alpha: 0.62)
-        modeToggle.tint = paper.textColor()
+        setupButton.tint = paper.textColor(alpha: 0.62)
         retryButton.tint = paper.textColor(alpha: 0.7)
         stickAnywayButton.tint = paper.textColor(alpha: 0.9)
         spinner.tint = paper.textColor(alpha: 0.72)
@@ -635,6 +662,30 @@ final class DraftTextView: NSTextView {
     var onCancel: (() -> Void)?
     var placeholder = ""
     var placeholderColor = NSColor.placeholderTextColor
+    /// Space between the placeholder and the line about headings, points and tasks.
+    private static let hintGap: CGFloat = 6
+
+    private var placeholderAttributes: [NSAttributedString.Key: Any] {
+        [.font: font ?? NSFont.systemFont(ofSize: 14), .foregroundColor: placeholderColor]
+    }
+
+    private func placeholderHeight(fittingWidth width: CGFloat) -> CGFloat {
+        guard !placeholder.isEmpty, width > 0 else { return 0 }
+        let rect = (placeholder as NSString).boundingRect(
+            with: NSSize(width: width, height: 400), options: [.usesLineFragmentOrigin], attributes: placeholderAttributes
+        )
+        return ceil(rect.height)
+    }
+
+    /// Height of what an empty draft shows: the placeholder and the hint (spec 18.5).
+    func emptyHeight(fittingWidth width: CGFloat) -> CGFloat {
+        placeholderHeight(fittingWidth: width) + Self.hintGap + MarkupHint.height(fittingWidth: width) + textContainerInset.height * 2
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        MarkupHint.follow(self)
+    }
 
     /// Key positions, so that shortcuts work on any layout.
     private enum KeyCode {
@@ -700,13 +751,13 @@ final class DraftTextView: NSTextView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         guard string.isEmpty, !placeholder.isEmpty else { return }
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: font ?? NSFont.systemFont(ofSize: 14),
-            .foregroundColor: placeholderColor,
-        ]
         let origin = NSPoint(x: textContainerInset.width, y: textContainerInset.height)
-        let rect = NSRect(origin: origin, size: NSSize(width: bounds.width - origin.x * 2, height: bounds.height))
-        (placeholder as NSString).draw(with: rect, options: [.usesLineFragmentOrigin], attributes: attributes)
+        let width = bounds.width - origin.x * 2
+        let rect = NSRect(origin: origin, size: NSSize(width: width, height: bounds.height))
+        (placeholder as NSString).draw(with: rect, options: [.usesLineFragmentOrigin], attributes: placeholderAttributes)
+        // Spec 18.5: one small grey line, gone with the first character.
+        let hintY = origin.y + placeholderHeight(fittingWidth: width) + Self.hintGap
+        MarkupHint.draw(at: NSPoint(x: origin.x, y: hintY), width: width, color: placeholderColor.withAlphaComponent(0.32))
     }
 }
 

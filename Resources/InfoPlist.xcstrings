@@ -17,23 +17,6 @@
           }
         }
       }
-    },
-    "NSSpeechRecognitionUsageDescription": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Stickflow recognizes what you dictate on this Mac, without sending it anywhere."
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Stickflow распознаёт надиктованное на этом Mac, без отправки в сеть."
-          }
-        }
-      }
     }
   },
   "version": "1.0"

@@ -438,6 +438,16 @@ final class BlockTextView: NSTextView {
         let origin = textContainerOrigin
         let point = NSPoint(x: origin.x, y: origin.y + style.baselineOffset(for: title))
         (placeholder as NSString).draw(at: point, withAttributes: attributes)
+        // Spec 18.5: how to start a heading, a point and a task; gone with the first character.
+        let font = style.font(for: title)
+        let hintY = point.y + ceil(font.ascender - font.descender + font.leading) + 4
+        let width = bounds.width - origin.x * 2 - 4
+        MarkupHint.draw(at: NSPoint(x: origin.x, y: hintY), width: width, color: style.color.textColor(alpha: 0.3))
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        MarkupHint.follow(self)
     }
 
     // MARK: Mouse

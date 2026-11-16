@@ -43,11 +43,14 @@ final class EntryController: NSObject {
     private let padPanel = EntryController.makePanel()
     private let padContainer = NSView(frame: .zero)
     private let padView = PadView(frame: .zero)
+    private let padShadow = PadShadowView(frame: .zero)
     private let glowView = PadGlowView(frame: .zero)
     let draft: DraftController
+    /// Dictation into a sticker that is already there (spec 18.4).
+    private(set) var voice: StickerVoice?
 
-    /// Space around the pad inside its window, for the tilt and the glow.
-    private static let padMargin: CGFloat = 24
+    /// Space around the pad inside its window, for the tilt, the shadow and the glow.
+    private static let padMargin: CGFloat = 44
 
     init(
         tuning: Tuning,
@@ -56,6 +59,8 @@ final class EntryController: NSObject {
         stickers: StickerManager,
         makeStructurer: @escaping () -> any Structurer,
         dictation: Dictation,
+        stickerDictation: Dictation,
+        speech: SpeechSetup,
         clock: any AppClock
     ) {
         self.makeStructurer = makeStructurer
@@ -64,8 +69,14 @@ final class EntryController: NSObject {
         self.preferences = preferences
         self.displays = displays
         self.stickers = stickers
-        draft = DraftController(tuning: tuning, preferences: preferences, dictation: dictation)
+        draft = DraftController(tuning: tuning, preferences: preferences, dictation: dictation, speech: speech)
         super.init()
+        let voice = StickerVoice(dictation: stickerDictation, stickers: stickers, speech: speech) { [weak self] text in
+            await self?.plan(for: text) ?? nil
+        }
+        // One microphone: the draft's dictation comes first.
+        voice.isBlocked = { [weak self] in self?.draft.isOpen ?? false }
+        self.voice = voice
 
         tabPanel.contentView = tabView
         tabPanel.ignoresMouseEvents = true
@@ -73,7 +84,11 @@ final class EntryController: NSObject {
         let content = NSView(frame: .zero)
         content.wantsLayer = true // opacity and rotation need layers
         content.addSubview(glowView)
+        padContainer.wantsLayer = true
+        padContainer.addSubview(padShadow)
         padContainer.addSubview(padView)
+        // The pad moves as a picture; it is drawn again only when it changes.
+        padView.layerContentsRedrawPolicy = .onSetNeedsDisplay
         content.addSubview(padContainer)
         padPanel.contentView = content
         padPanel.ignoresMouseEvents = true
@@ -228,7 +243,14 @@ final class EntryController: NSObject {
             size: CGSize(width: size, height: size)
         )
         padView.frame = padContainer.bounds
+        padShadow.frame = padContainer.bounds
+        padShadow.configure(radius: CGFloat(tuning.padShadowRadius), offsetY: CGFloat(tuning.padShadowOffset))
+        padShadow.setOpacity(phase == .idle ? 0 : Float(tuning.padShadowOpacity), duration: 0, curve: .drawer)
+        glowView.strength = CGFloat(tuning.padGlowOpacity)
         glowView.frame = CGRect(x: 0, y: 0, width: window.width, height: window.height)
+        // On screen all the time, empty while the pad is in: bringing a window in
+        // at the moment the pad starts to move costs the first frames (fix H5).
+        padPanel.orderFrontRegardless()
     }
 
     /// Screen capture started or ended: the pad and the tab hide with the stickers.
@@ -287,37 +309,34 @@ final class EntryController: NSObject {
         let duration = animated ? tuning.scaled(base) : 0
 
         if newPhase != .idle {
+            // Above the stickers that have appeared since; the window is on screen already.
             padPanel.orderFrontRegardless()
             tabPanel.orderOut(nil)
         } else {
             padPanel.ignoresMouseEvents = true
         }
 
-        let glowAlpha: CGFloat = newPhase == .idle ? 0 : 1
-        guard duration > 0 else {
-            padContainer.setFrameOrigin(target)
-            padContainer.frameCenterRotation = tilt
-            glowView.alphaValue = glowAlpha
-            finishShowing(newPhase)
-            return
-        }
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = duration
-            context.timingFunction = MotionCurve.drawer.timingFunction
-            padContainer.animator().setFrameOrigin(target)
-            padContainer.animator().frameCenterRotation = tilt
-            glowView.animator().alphaValue = glowAlpha
-        }, completionHandler: { [self] in
-            MainActor.assumeIsolated {
-                self.finishShowing(newPhase)
+        // The pad, its shadow and the oval move as layers on the render server, at
+        // the display's own rate; the window stays where it is (spec 6.7 `drawer`, fix H5).
+        let isOut = newPhase != .idle
+        CATransaction.begin()
+        if duration > 0 {
+            CATransaction.setCompletionBlock { [weak self] in
+                MainActor.assumeIsolated {
+                    self?.finishShowing(newPhase)
+                }
             }
-        })
+        }
+        padContainer.slide(to: target, rotation: tilt, duration: duration, curve: .drawer)
+        padShadow.setOpacity(isOut ? Float(tuning.padShadowOpacity) : 0, duration: duration, curve: .drawer)
+        glowView.fade(to: isOut ? 1 : 0, duration: duration, curve: .drawer)
+        CATransaction.commit()
+        if duration <= 0 { finishShowing(newPhase) }
     }
 
     private func finishShowing(_ shown: EdgeIntentDetector.Phase) {
         // The pad may have been called again while it was hiding.
         guard shown == .idle, phase == .idle else { return }
-        padPanel.orderOut(nil)
         if preferences.showsEdgeTab, !isSuppressed, layout != nil {
             tabPanel.orderFrontRegardless()
         }
@@ -348,8 +367,8 @@ final class EntryController: NSObject {
         show(.open, animated: origin == .pad || phase != .open)
 
         clearPending()
-        // "Add to sticker" is offered only when there is one (spec 4.3).
-        draft.allowsAppend = stickers.topController != nil
+        // One microphone: a dictation into a sticker gives way to the draft.
+        voice?.cancel()
         let window = padWindowFrame(layout)
         let padLeft = layout.edge.side == .right
             ? window.maxX - CGFloat(tuning.padOpenReach)
@@ -479,7 +498,7 @@ final class EntryController: NSObject {
             return
         }
         pending = .preview(text: text, plan: plan)
-        draft.showResult(plan.previewLines(includingTitle: !draft.isAppending))
+        draft.showResult(plan.previewLines())
         previewTimer?.invalidate()
         previewTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -513,30 +532,30 @@ final class EntryController: NSObject {
     }
 
     private func commit(_ plan: NotePlan, text: String) {
-        let isAppending = draft.isAppending
         clearPending()
-        if isAppending, let target = stickers.topController {
-            draft.close(animated: true)
-            stickers.append(plan, to: target)
-            stickers.pointerNeedsAttention()
-        } else {
-            stick(PlainTextPlan.Result(title: plan.title, blocks: plan.blocks()), rawInput: text)
-        }
+        stick(PlainTextPlan.Result(title: plan.title, blocks: plan.blocks()), rawInput: text)
     }
 
     /// Sticks the text line by line, without a structurer.
     private func commitAsIs(_ text: String) {
         let lines = PlainTextPlan.make(from: text, plainLineKind: tuning.newLineAfterTitleIsTodo ? .todo : .text)
-        guard draft.isAppending, stickers.topController != nil else {
-            clearPending()
-            stick(lines, rawInput: text)
-            return
+        clearPending()
+        stick(lines, rawInput: text)
+    }
+
+    /// A plan for text dictated into a sticker (spec 18.4); `nil` when the
+    /// structurer failed or found nothing to do. No dialog is put over a sticker:
+    /// a cloud provider that has not been allowed yet gives way to the rules.
+    func plan(for text: String) async -> NotePlan? {
+        var request = StructureRequest(text: text, locale: .current, now: clock.now)
+        request.ambiguousHoursAreAfternoon = tuning.rulesAssumeAfternoon
+        var structurer = self.structurer
+        if !structurer.isLocal, !preferences.cloudConsent.contains(structurer.id) {
+            structurer = RuleStructurer()
         }
-        // Added to a sticker, every line is an item of its own.
-        let items = ([lines.title] + lines.blocks.map(\.text))
-            .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-            .map { NotePlan.Item(text: $0) }
-        commit(NotePlan(title: "", sections: [NotePlan.Section(items: items)]), text: text)
+        let limit = structurer.isLocal ? tuning.structureTimeoutLocal : tuning.structureTimeoutCloud
+        guard let plan = try? await Self.run(structurer, request, limit: limit).get(), !plan.isEmpty else { return nil }
+        return plan
     }
 
     private func stick(_ plan: PlainTextPlan.Result, rawInput text: String) {

@@ -10,7 +10,7 @@ import StickflowCore
 /// downloads it once, by the user's action, and checks it.
 ///
 /// The Core ML packages need macOS 15; on macOS 14 the engine is never ready
-/// and the app stays with Apple's recogniser.
+/// and there is no dictation (spec 18.1: no fallback recogniser).
 final class GigaAMEngine: SpeechEngine {
     let id = "gigaam-v3-e2e-rnnt"
     let store: SpeechModelStore
@@ -236,81 +236,5 @@ private actor GigaAMRunner {
         let scalars = MLShapedArray<Float>(converting: array).scalars
         guard scalars.count == shape.reduce(1, *) else { throw SpeechError.failed("\(name) has \(scalars.count) values") }
         return MLMultiArray(MLShapedArray<Float>(scalars: scalars, shape: shape))
-    }
-}
-
-/// GigaAM when its model is on this Mac, Apple's recogniser until then (spec 7:
-/// "while the model downloads"). The first press of the microphone starts the
-/// download; it goes on in the background and its progress keeps being reported.
-final class SpeechRouter: SpeechEngine, @unchecked Sendable {
-    let id = "gigaam-or-apple"
-    private let primary: GigaAMEngine
-    private let fallback: any SpeechEngine
-    private let lock = NSLock()
-    private var installation: Task<Void, any Error>?
-
-    init(primary: GigaAMEngine, fallback: any SpeechEngine) {
-        self.primary = primary
-        self.fallback = fallback
-    }
-
-    var isReady: Bool { primary.isReady || fallback.isReady }
-
-    func prepare(progress: @escaping @Sendable (Double) -> Void) async throws {
-        if primary.isReady {
-            // The model is on this Mac. It loads while the user speaks, so the
-            // microphone opens at once.
-            let primary = self.primary
-            Task { await primary.warmUp() }
-            return
-        }
-        let installing = startInstalling(progress: progress)
-        do {
-            try await fallback.prepare(progress: { _ in })
-        } catch {
-            // Nothing from Apple on this Mac: the only way is to wait for the model.
-            guard let installing else { throw error }
-            try await installing.value
-        }
-    }
-
-    func transcribe(_ audio: AudioBuffer16k) async throws -> String {
-        if primary.isReady {
-            do {
-                return try await primary.transcribe(audio)
-            } catch SpeechError.nothingHeard {
-                throw SpeechError.nothingHeard
-            } catch {
-                // A model that does not load must not take dictation away. The
-                // fallback was not asked for its permission yet: the model was there.
-                try await fallback.prepare(progress: { _ in })
-            }
-        }
-        return try await fallback.transcribe(audio)
-    }
-
-    /// One download at a time; a failed one may be tried again at the next press.
-    private func startInstalling(progress: @escaping @Sendable (Double) -> Void) -> Task<Void, any Error>? {
-        guard primary.isSupported else { return nil }
-        lock.lock()
-        defer { lock.unlock() }
-        if let installation { return installation }
-        let primary = self.primary
-        let task = Task { [weak self] in
-            do {
-                try await primary.prepare(progress: progress)
-            } catch {
-                self?.forgetInstallation()
-                throw error
-            }
-        }
-        installation = task
-        return task
-    }
-
-    private func forgetInstallation() {
-        lock.lock()
-        installation = nil
-        lock.unlock()
     }
 }

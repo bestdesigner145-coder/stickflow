@@ -186,10 +186,8 @@ final class StickerManager: NSObject {
         return controller
     }
 
-    /// The sticker "add to sticker" writes into: the one stuck last.
-    var topController: StickerController? {
-        controllers.last { !$0.isClosed }
-    }
+    /// A sticker has got its window; dictation hangs its microphone on it (spec 18.4).
+    var onControllerCreated: ((StickerController) -> Void)?
 
     /// Adds a plan's lines to a sticker that is already there (spec 8.3).
     /// - Returns: false when the sticker already said all of it.
@@ -227,6 +225,7 @@ final class StickerManager: NSObject {
         let controller = StickerController(sticker: sticker, tuning: tuning, preferences: preferences, clock: clock)
         controller.manager = self
         controllers.append(controller)
+        onControllerCreated?(controller)
         return controller
     }
 
