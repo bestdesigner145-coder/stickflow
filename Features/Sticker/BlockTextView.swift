@@ -312,7 +312,12 @@ final class BlockTextView: NSTextView {
         guard let layoutManager, let textContainer else { return 0 }
         layoutManager.ensureLayout(for: textContainer)
         let used = layoutManager.usedRect(for: textContainer)
-        return ceil(used.height) + textContainerInset.height * 2
+        var height = ceil(used.height) + textContainerInset.height * 2
+        // An empty sticker also shows the line about headings, points and tasks (spec 18.5).
+        if string.isEmpty, !placeholder.isEmpty {
+            height += 4 + MarkupHint.height(fittingWidth: bounds.width - textContainerOrigin.x * 2 - 4)
+        }
+        return height
     }
 
     /// Number of lines that start below `y` (in the text view's coordinates) or are cut by it.
