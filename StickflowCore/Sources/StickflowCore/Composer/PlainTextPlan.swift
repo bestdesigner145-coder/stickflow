@@ -67,7 +67,8 @@ public enum PlainTextPlan {
     /// The block shortcut `line` starts with and the text after it. The trailing
     /// space of a marker may have been trimmed away ("-" for "- ").
     private static func marker(in line: String) -> (match: BlockShortcut.Match, content: String)? {
-        if line.lowercased().hasPrefix(russianTodoPrefix) {
+        // The trailing space may have been trimmed away, as with "-".
+        if (line + " ").lowercased().hasPrefix(russianTodoPrefix) {
             let rest = String(line.dropFirst(russianTodoPrefix.count)).trimmingCharacters(in: .whitespaces)
             return (BlockShortcut.Match(kind: .todo, done: false, prefixLength: russianTodoPrefix.utf16.count), rest)
         }

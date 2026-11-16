@@ -323,7 +323,7 @@ final class PlainTextPlanTests: XCTestCase {
         // The same keys on a Russian layout (spec 18.5): "№№" for "##", "хъ" for "[]".
         XCTAssertTrue(PlainTextPlan.looksStructured("№№ Работа"))
         XCTAssertTrue(PlainTextPlan.looksStructured("хъ купить молоко"))
-        XCTAssertFalse(PlainTextPlan.looksStructured("хъ"))
+        XCTAssertFalse(PlainTextPlan.looksStructured("хъёмный"))
         let russian = PlainTextPlan.make(from: "№№ Дом\nхъ помыть окна\nХъ  разобрать шкаф\nхъ ")
         XCTAssertEqual(russian.title, "")
         XCTAssertEqual(russian.blocks.map(\.kind), [.heading2, .todo, .todo])
