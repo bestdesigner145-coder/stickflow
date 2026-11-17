@@ -165,8 +165,19 @@ jobs:
           # Real time, but the waiting for the download and the models is shown faster.
           python3 scripts/make-demo-video.py demo
           ffmpeg -loglevel error -y -f concat -safe 0 -i demo/frames.txt \
-            -vf "scale=1440:-2,fps=10,format=yuv420p" -c:v libx264 -preset veryfast -crf 26 demo/first-launch.mp4
+            -vf "scale=1280:-2,fps=10,format=yuv420p" -c:v libx264 -preset veryfast -crf 30 demo/first-launch.mp4
           ls -l demo/first-launch.mp4
+
+      # The video as text in the log, for a reader who cannot open artifacts.
+      - name: Print the video
+        if: always()
+        run: |
+          for file in demo/first-launch.mp4 demo/demo.txt; do
+            [ -f "${file}" ] || continue
+            echo "-----BEGIN $(basename "${file}")-----"
+            base64 -b 160 -i "${file}"
+            echo "-----END $(basename "${file}")-----"
+          done
 
       - uses: actions/upload-artifact@v4
         if: always()
