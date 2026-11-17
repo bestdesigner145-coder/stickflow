@@ -34,19 +34,26 @@ enum DemoRun {
                 return done()
             }
 
+            func took(since start: Date) -> String {
+                let seconds = Int(Date().timeIntervalSince(start).rounded())
+                return seconds < 60 ? "\(seconds) с" : "\(seconds / 60) мин \(seconds % 60) с"
+            }
+
             let models = environment.models
-            say("Первый запуск: окно «Голос → задачи»")
+            say("Первый запуск: окно «Голос → задачи». Виртуальный Mac без GPU: ожидание в видео ускорено")
             environment.showModelSetup()
             await pause(3)
             say("Жму «Скачать»: GigaAM и модель разбора, один раз")
             environment.modelSetup?.pressPrimary()
+            var start = Date()
             let downloaded = await wait(1800) { models.state == .ready || models.state == .failed }
             log.append("models: \(models.state)")
             guard downloaded, models.state == .ready else {
                 say("Модели не скачались: \(models.state)")
                 return finish(log, audio: audio)
             }
-            await pause(2)
+            say("Скачано за \(took(since: start))")
+            await pause(3)
             environment.modelSetup?.snapshotView.window?.close()
 
             say("Черновик у пачки. Жму микрофон и диктую")
@@ -59,15 +66,18 @@ enum DemoRun {
             await pause(length + 0.5)
             draft.dictation.toggle()
             say("Распознаю речь — GigaAM, на этом Mac")
+            start = Date()
             let heard = await wait(180) { draft.dictation.state == .idle }
             log.append("heard: \(draft.text)")
             guard heard, !draft.text.isEmpty else {
                 say("Речь не распозналась")
                 return finish(log, audio: audio)
             }
-            await pause(2.5)
+            say("Распознано за \(took(since: start)). Текст — в черновике")
+            await pause(3)
 
             say("Enter: встроенная модель раскладывает по задачам")
+            start = Date()
             let before = environment.stickers.controllers.count
             draft.submit()
             let stuck = await wait(600) { environment.stickers.controllers.count > before }
@@ -77,7 +87,7 @@ enum DemoRun {
             }
             await pause(1.5)
             let tasks = sticker.sticker.blocks.filter { $0.kind == .todo }.map(\.text)
-            say("Готово: «\(sticker.sticker.title)», задач: \(tasks.count)")
+            say("Готово за \(took(since: start)): «\(sticker.sticker.title)», задач: \(tasks.count)")
             log.append("title: \(sticker.sticker.title)")
             log += tasks.map { "task: \($0)" }
             await pause(6)

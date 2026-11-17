@@ -96,7 +96,7 @@ jobs:
       - name: Combine
         run: |
           python3 scripts/combine-reports.py reports summary.md
-          cat summary.md >> "$GITHUB_STEP_SUMMARY"
+          cat summary.md | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
           name: model-choice
@@ -150,6 +150,7 @@ jobs:
           index=0
           while kill -0 "${app}" 2>/dev/null && [ "${index}" -lt 4800 ]; do
             screencapture -x -C -t jpg "demo/frames/$(printf '%05d' "${index}").jpg" || true
+            echo "${index} $(date +%s)" >> demo/times.txt
             index=$((index + 1))
             sleep 0.4
           done
@@ -161,9 +162,10 @@ jobs:
       - name: Make the video
         if: always()
         run: |
-          # Frames every 0.4 s, played at 2.5 a second: real time.
-          ffmpeg -loglevel error -y -framerate 2.5 -pattern_type glob -i 'demo/frames/*.jpg' \
-            -vf "scale=1440:-2,format=yuv420p" -c:v libx264 -preset veryfast -crf 26 demo/first-launch.mp4
+          # Real time, but the waiting for the download and the models is shown faster.
+          python3 scripts/make-demo-video.py demo
+          ffmpeg -loglevel error -y -f concat -safe 0 -i demo/frames.txt \
+            -vf "scale=1440:-2,fps=10,format=yuv420p" -c:v libx264 -preset veryfast -crf 26 demo/first-launch.mp4
           ls -l demo/first-launch.mp4
 
       - uses: actions/upload-artifact@v4
