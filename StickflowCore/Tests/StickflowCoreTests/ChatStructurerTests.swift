@@ -50,7 +50,7 @@ final class ChatStructurerTests: XCTestCase {
         XCTAssertTrue(messages[0].content.contains("Не пересказывай"), "spec 18.9")
         XCTAssertTrue(messages[0].content.contains("не новый пункт"))
         XCTAssertTrue(messages[0].content.contains("не задачи"))
-        XCTAssertTrue(messages[0].content.contains("Один пункт — одно действие"))
+        XCTAssertTrue(messages[0].content.contains("2–7 слов"))
         XCTAssertTrue(messages[0].content.contains("JSON"))
         XCTAssertEqual(messages.last?.content, "Купить молоко")
         // Every example answer is a plan the parser reads.

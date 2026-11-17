@@ -179,7 +179,7 @@ public final class LlamaRunner: @unchecked Sendable {
         try loadIfNeeded()
         timings.loading = lastLoad
         guard let model, let context, let batch else { throw LocalModelError.contextFailed }
-        let vocab = llama_model_get_vocab(model)
+        guard let vocab = llama_model_get_vocab(model) else { throw LocalModelError.contextFailed }
         let tokens = tokenize(prompt, vocab: vocab)
         timings.promptTokens = tokens.count
         guard tokens.count + settings.maxAnswerTokens <= Int(settings.contextLength), !tokens.isEmpty else {
