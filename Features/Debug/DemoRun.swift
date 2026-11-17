@@ -79,10 +79,12 @@ enum DemoRun {
             say("Enter: встроенная модель раскладывает по задачам")
             start = Date()
             let before = environment.stickers.controllers.count
+            // A virtual Mac without a GPU needs minutes where a Mac needs seconds.
+            environment.tuning.structureTimeoutBuiltIn = 1800
             draft.submit()
-            let stuck = await wait(600) { environment.stickers.controllers.count > before }
-            guard stuck, let sticker = environment.stickers.controllers.last else {
-                say("Стикер не появился: \(draft.phase)")
+            let stuck = await wait(1800) { environment.stickers.controllers.count > before || draft.phase == .failed }
+            guard stuck, draft.phase != .failed, let sticker = environment.stickers.controllers.last else {
+                say("Стикер не появился: \(draft.phase) \(draft.rootView.failureMessage)")
                 return finish(log, audio: audio)
             }
             await pause(1.5)

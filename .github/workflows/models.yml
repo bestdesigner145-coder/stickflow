@@ -111,7 +111,7 @@ jobs:
     name: Video of the first launch
     if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[video]') }}
     runs-on: macos-15
-    timeout-minutes: 60
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
 
