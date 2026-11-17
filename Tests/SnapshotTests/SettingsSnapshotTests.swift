@@ -23,7 +23,7 @@ final class SettingsSnapshotTests: XCTestCase {
         preferences.structurerChoice = choice
         let keys = StructuringSettingsModel.KeyStore(read: { $0 == "claude" ? "sk-ant-example-1a2b" : nil }, save: { _, _ in true })
         let model = StructuringSettingsModel(
-            preferences: preferences, models: .ready(), network: Offline(), keys: keys, builtInName: "Qwen3 4B"
+            preferences: preferences, models: .ready(), network: Offline(), keys: keys, builtInName: "Gemma 3 4B"
         )
         model.builtInBytes = 2_500_000_000
         model.lists[.claude] = [ChatProvider.claudeDefaultModel]

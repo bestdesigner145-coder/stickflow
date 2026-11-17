@@ -14,7 +14,7 @@ final class BuiltInModel {
     static let manifestName = "structuring-model"
 
     let store: ModelStore?
-    /// "Qwen3 4B": how the settings name it.
+    /// "Gemma 3 4B": how the settings name it.
     let name: String
     private let settings: LlamaSettings
     private var structurer: LocalStructurer?

@@ -1,6 +1,6 @@
 {
   "id": "gemma-3-4b-it-q4km",
-  "name": "Gemma 3 4B Instruct, Q4_K_M",
+  "name": "Gemma 3 4B",
   "revision": "5a3566e716d80f709ed7b79817eaf7733d2a1fce",
   "license": "Gemma Terms of Use",
   "sources": {

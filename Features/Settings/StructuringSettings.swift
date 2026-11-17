@@ -281,7 +281,7 @@ struct StructuringSettingsView: View {
         .frame(width: 460)
         .fixedSize(horizontal: false, vertical: true)
         .task(id: model.choice) {
-            if model.choice == .ollama { await model.askOllama() }
+            if model.choice == .ollama, model.server == .unknown { await model.askOllama() }
         }
     }
 
@@ -338,6 +338,12 @@ struct StructuringSettingsView: View {
                         }
                     } label: {
                         Text(L10n.settingsOllamaNotRunning).foregroundStyle(.red)
+                    }
+                case .asking:
+                    LabeledContent {
+                        ProgressView().controlSize(.small)
+                    } label: {
+                        Text(L10n.settingsModel)
                     }
                 default:
                     modelRow(selection: $model.ollamaModel, provider: .ollama)
