@@ -145,7 +145,7 @@ jobs:
         run: |
           mkdir -p demo/frames
           APP=build/DerivedData/Build/Products/Debug/Stickflow.app/Contents/MacOS/Stickflow
-          "$APP" --demo "$PWD/demo/said.wav" --models-root "$RUNNER_TEMP/models" --cpu-only > demo/app.log 2>&1 &
+          "$APP" --demo "$PWD/demo/said.wav" --models-root "$RUNNER_TEMP/models" --cpu-only -AppleLanguages "(ru)" -AppleLocale ru_RU > demo/app.log 2>&1 &
           app=$!
           index=0
           while kill -0 "${app}" 2>/dev/null && [ "${index}" -lt 4800 ]; do
