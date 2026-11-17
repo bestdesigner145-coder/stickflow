@@ -33,6 +33,13 @@ final class LocalModelPromptTests: XCTestCase {
 
         """)
         XCTAssertTrue(PromptFormat.chatML(thinkingOff: false).render(turns).hasSuffix("<|im_start|>assistant\n"))
+        // What every request shares is the beginning of every prompt.
+        for format in [PromptFormat.chatML(thinkingOff: true), .gemma] {
+            let prefix = format.prefix(turns)
+            XCTAssertTrue(format.render(turns).hasPrefix(prefix))
+            XCTAssertFalse(prefix.contains("Купить молоко"))
+            XCTAssertTrue(prefix.contains("{}"))
+        }
     }
 
     func testGemmaFoldsTheSystemTurnIntoTheFirstUserTurn() {

@@ -1,43 +1,65 @@
-name: Mirror speech model
+name: Mirror models
 
-# Spec 7: the app takes the speech model from this repository's Releases first.
-# Changing models/*.source.json copies the model from Hugging Face; the release
-# itself is created only when the file says "publish": true.
+# Spec 7 and 18.10 A2: the app takes its models from this repository's
+# Releases first. Changing models/*.source.json copies a model from Hugging
+# Face; the release itself is created only when the file says "publish": true.
 on:
   push:
     branches: ["stage-*", main]
     paths: ["models/*.source.json"]
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   mirror:
-    name: Copy the model
+    name: Copy ${{ matrix.source }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        source: [gigaam-v3-e2e-rnnt, structuring]
     steps:
       - uses: actions/checkout@v4
 
       - name: Download from Hugging Face
-        run: python3 scripts/mirror-model.py models/gigaam-v3-e2e-rnnt.source.json work
+        run: |
+          file="models/${{ matrix.source }}.source.json"
+          if [ ! -f "${file}" ]; then echo "no ${file}"; exit 0; fi
+          kind="$(python3 -c "import json; print(json.load(open('${file}')).get('kind', 'files'))")"
+          if [ "${kind}" = "gguf" ]; then
+            python3 scripts/mirror-gguf.py "${file}" work
+          else
+            python3 scripts/mirror-model.py "${file}" work
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ hashFiles('work/manifest.json') != '' }}
+        with:
+          name: manifest-${{ matrix.source }}
+          path: work/manifest.json
 
       - name: Publish the release
+        if: ${{ hashFiles('work/manifest.json') != '' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="$(python3 -c 'import json; print(json.load(open("models/gigaam-v3-e2e-rnnt.source.json"))["tag"])')"
-          publish="$(python3 -c 'import json; print(json.load(open("models/gigaam-v3-e2e-rnnt.source.json"))["publish"])')"
-          if [ "$publish" != "True" ]; then
+          file="models/${{ matrix.source }}.source.json"
+          tag="$(python3 -c "import json; print(json.load(open('${file}'))['tag'])")"
+          title="$(python3 -c "import json; print(json.load(open('${file}')).get('title', 'Speech model: GigaAM-v3 e2e RNNT (Core ML)'))")"
+          publish="$(python3 -c "import json; print(json.load(open('${file}'))['publish'])")"
+          if [ "${publish}" != "True" ]; then
             echo "publish is off: nothing was released"
             exit 0
           fi
-          if gh release view "$tag" >/dev/null 2>&1; then
-            echo "release $tag exists already"
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            echo "release ${tag} exists already"
             exit 0
           fi
-          gh release create "$tag" work/assets/* \
-            --title "Speech model: GigaAM-v3 e2e RNNT (Core ML)" \
+          gh release create "${tag}" work/assets/* \
+            --title "${title}" \
             --notes-file work/notes.md \
             --target "$GITHUB_SHA" \
             --latest=false

@@ -13,12 +13,12 @@ import StickflowCore
 /// and there is no dictation (spec 18.1: no fallback recogniser).
 final class GigaAMEngine: SpeechEngine {
     let id = "gigaam-v3-e2e-rnnt"
-    let store: SpeechModelStore
+    let store: ModelStore
     private let runner: GigaAMRunner
 
     /// - Parameter idleUnload: seconds after the last use at which the models
     ///   leave memory (about half a gigabyte); the next dictation loads them again.
-    init(store: SpeechModelStore, computeUnits: MLComputeUnits = .cpuAndGPU, idleUnload: TimeInterval = 120) {
+    init(store: ModelStore, computeUnits: MLComputeUnits = .cpuAndGPU, idleUnload: TimeInterval = 120) {
         self.store = store
         runner = GigaAMRunner(computeUnits: computeUnits, idleUnload: idleUnload)
     }
@@ -36,7 +36,8 @@ final class GigaAMEngine: SpeechEngine {
     func prepare(progress: @escaping @Sendable (Double) -> Void) async throws {
         guard isSupported else { throw SpeechError.unavailable }
         if !store.isInstalled {
-            try await store.install(progress: progress)
+            let total = Double(max(store.manifest.totalSize, 1))
+            try await store.install { bytes in progress(min(Double(bytes) / total, 1)) }
         }
         progress(1)
         try await runner.loadIfNeeded(from: store)
@@ -121,7 +122,7 @@ private actor GigaAMRunner {
         if useCount == count { models = nil }
     }
 
-    func loadIfNeeded(from store: SpeechModelStore) async throws {
+    func loadIfNeeded(from store: ModelStore) async throws {
         defer { unloadWhenIdle() }
         guard models == nil else { return }
         let encoder = try await load("GigaAMv3Encoder", from: store)
@@ -133,7 +134,7 @@ private actor GigaAMRunner {
     }
 
     /// Compiles the package the first time; the compiled model is kept next to it.
-    private func load(_ name: String, from store: SpeechModelStore) async throws -> MLModel {
+    private func load(_ name: String, from store: ModelStore) async throws -> MLModel {
         let compiled = store.directory.appendingPathComponent("\(name).mlmodelc", isDirectory: true)
         if !FileManager.default.fileExists(atPath: compiled.path) {
             let fresh = try await MLModel.compileModel(at: store.directory.appendingPathComponent("\(name).mlpackage", isDirectory: true))

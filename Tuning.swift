@@ -19,9 +19,10 @@ final class Tuning {
 
     var glueStripHeight: Double = 14
     var cornerZoneSize: Double = 28
-    var widthSmall: Double = 200
-    var widthMedium: Double = 232
-    var widthLarge: Double = 280
+    /// Spec 18.6: 260 / 320 / 400; a title of 2–4 words fits one line at M.
+    var widthSmall: Double = 260
+    var widthMedium: Double = 320
+    var widthLarge: Double = 400
     /// Tallest a sticker gets at rest; longer text fades out at the bottom.
     var maxPaperHeight: Double = 280
     var minPaperHeight: Double = 52
@@ -216,6 +217,8 @@ final class Tuning {
 
     /// How long the draft shows the result, highlighted, before it is stuck.
     var structuredPreviewDuration: Double = 1.2
+    /// The built-in model, the first time: it loads and reads its rules (spec 18.10).
+    var structureTimeoutBuiltIn: Double = 90
     /// A structurer that takes longer has failed (spec 8.1).
     var structureTimeoutLocal: Double = 20
     var structureTimeoutCloud: Double = 15
@@ -234,11 +237,9 @@ final class Tuning {
     /// The speech model (about half a gigabyte in memory) is let go this long
     /// after the last dictation. Read once, at launch.
     var speechModelIdleUnload: Double = 120
+    /// The built-in model leaves memory this long after its last answer (spec 18.10 A1).
+    var structuringModelIdleUnload: Double = 300
 
-    /// What a draft with text does when the keyboard goes elsewhere or the desktop
-    /// changes. Off: it stays on screen. On: it closes and is kept as a draft, the
-    /// way Esc does. An empty draft always closes.
-    var draftWithTextClosesOnFocusLoss = false
     /// On (spec 4.10): ⌘Z brings a peeled sticker back while its toast is up. The
     /// key is taken from the app in front for those few seconds, or until the next click.
     var undoPeelUsesCommandZ = true

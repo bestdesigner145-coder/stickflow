@@ -81,13 +81,16 @@ final class Preferences {
     var structurerChoice: StructurerChoice
     var ollamaHost: String
     var ollamaModel: String
+    /// DeepSeek and other OpenAI-compatible services (spec 18.10 A4).
     var openAIBaseURL: String
     var openAIModel: String
+    /// ChatGPT, through OpenAI's own API.
+    var chatGPTModel: String
+    /// The server at `ollamaHost` is LM Studio or another that speaks OpenAI's API.
+    var localServerSpeaksOpenAI: Bool
     var claudeModel: String
     /// Providers the user allowed to receive text without being asked each time.
     var cloudConsent: [String]
-    /// The first-launch step that offers the speech model has been shown (spec 18.1).
-    var speechModelOffered: Bool
 
     @ObservationIgnored private let defaults: UserDefaults
 
@@ -113,8 +116,9 @@ final class Preferences {
         static let openAIBaseURL = "openAIBaseURL"
         static let openAIModel = "openAIModel"
         static let claudeModel = "claudeModel"
+        static let chatGPTModel = "chatGPTModel"
+        static let localServerSpeaksOpenAI = "localServerSpeaksOpenAI"
         static let cloudConsent = "cloudConsent"
-        static let speechModelOffered = "speechModelOffered"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -132,9 +136,12 @@ final class Preferences {
             Key.showsEdgeTab: true,
             Key.defaultColor: PaperColor.default.rawValue,
             Key.editHintShownCount: 0,
-            Key.structurerChoice: StructurerChoice.rules.rawValue,
+            Key.structurerChoice: StructurerChoice.local.rawValue,
             Key.ollamaHost: "http://localhost:11434",
             Key.claudeModel: ChatProvider.claudeDefaultModel,
+            Key.chatGPTModel: StructurerChoice.chatGPTDefaultModel,
+            Key.openAIBaseURL: StructurerChoice.deepSeekBaseURL,
+            Key.openAIModel: StructurerChoice.deepSeekModel,
         ])
 
         paperOpacity = Self.clamp(defaults.double(forKey: Key.paperOpacity), to: Self.paperOpacityRange)
@@ -150,14 +157,16 @@ final class Preferences {
         defaultColor = defaults.string(forKey: Key.defaultColor).flatMap { PaperColor(stored: $0) } ?? .default
         stickerDisplayUUID = defaults.string(forKey: Key.stickerDisplayUUID)
         editHintShownCount = defaults.integer(forKey: Key.editHintShownCount)
-        structurerChoice = defaults.string(forKey: Key.structurerChoice).flatMap(StructurerChoice.init(rawValue:)) ?? .rules
+        // The rules were a choice once; now they are only the fallback (spec 18.10 A4).
+        structurerChoice = defaults.string(forKey: Key.structurerChoice).flatMap(StructurerChoice.init(rawValue:)) ?? .local
         ollamaHost = defaults.string(forKey: Key.ollamaHost) ?? ""
         ollamaModel = defaults.string(forKey: Key.ollamaModel) ?? ""
         openAIBaseURL = defaults.string(forKey: Key.openAIBaseURL) ?? ""
         openAIModel = defaults.string(forKey: Key.openAIModel) ?? ""
         claudeModel = defaults.string(forKey: Key.claudeModel) ?? ChatProvider.claudeDefaultModel
+        chatGPTModel = defaults.string(forKey: Key.chatGPTModel) ?? StructurerChoice.chatGPTDefaultModel
+        localServerSpeaksOpenAI = defaults.bool(forKey: Key.localServerSpeaksOpenAI)
         cloudConsent = defaults.stringArray(forKey: Key.cloudConsent) ?? []
-        speechModelOffered = defaults.bool(forKey: Key.speechModelOffered)
     }
 
     /// Writes the current values to `UserDefaults`, clamping numbers to their valid range.
@@ -188,8 +197,9 @@ final class Preferences {
         defaults.set(openAIBaseURL, forKey: Key.openAIBaseURL)
         defaults.set(openAIModel, forKey: Key.openAIModel)
         defaults.set(claudeModel, forKey: Key.claudeModel)
+        defaults.set(chatGPTModel, forKey: Key.chatGPTModel)
+        defaults.set(localServerSpeaksOpenAI, forKey: Key.localServerSpeaksOpenAI)
         defaults.set(cloudConsent, forKey: Key.cloudConsent)
-        defaults.set(speechModelOffered, forKey: Key.speechModelOffered)
     }
 
     private static func clamp(_ value: Double, to range: ClosedRange<Double>) -> Double {

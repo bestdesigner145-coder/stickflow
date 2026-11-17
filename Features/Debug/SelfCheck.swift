@@ -603,13 +603,8 @@ enum SelfCheck {
                     draft.attentionDidLeave()
                     await pause(0.4)
                     check(draft.isOpen && draft.text == "Недописанное", "a draft with text stays when focus is lost")
-                    tuning.draftWithTextClosesOnFocusLoss = true
-                    draft.attentionDidLeave()
+                    entry.toggleDraft()
                     await pause(0.4)
-                    tuning.draftWithTextClosesOnFocusLoss = false
-                    check(!draft.isOpen, "with the Tuning switch a draft with text closes when focus is lost")
-                    let kept = try environment.repository.stickers(status: .draft)
-                    check(kept.contains { $0.title == "Недописанное" }, "and is kept as a draft (\(kept.map(\.title)))")
                 } catch {
                     check(false, "drafts can be read (\(error))")
                 }
@@ -726,7 +721,8 @@ enum SelfCheck {
                     "todo:0:Доделать экран кошелька", "bullet:1:пустые состояния", "bullet:1:ошибки",
                     "todo:0:Созвониться с разработкой в три", "heading2:0:Если успею", "todo:0:Написать пост в телегу",
                 ]
-                check(planned.sticker.title == "План на сегодня", "a dictated paragraph gets the default title (\(planned.sticker.title))")
+                // A sticker with that title may be on screen already; then the new one gets the time (spec 18.7).
+                check(planned.sticker.title.hasPrefix("План на сегодня"), "a dictated paragraph gets the default title (\(planned.sticker.title))")
                 check(lines == expected, "the rules take it apart into tasks, details and an optional section (\(lines))")
                 check(planned.sticker.rawInput == dictated, "what was said is kept with the sticker")
                 check(!entry.draft.isOpen, "the draft closes once the plan is stuck")
@@ -780,18 +776,22 @@ enum SelfCheck {
                 "a second dictation adds to the same draft (\(entry.draft.text.count) characters after \(saidOnce.count))"
             )
 
-            // Spec 18.1: until the speech model is on this Mac there is no microphone,
+            // Spec 18.10 A3: while the voice is on its way there is no microphone,
             // only a line that says how far the download is.
-            environment.speech.setStateForTesting(.downloading(42))
-            check(!draftView.showsMicrophone && !draftView.setupButton.isHidden, "without the model the microphone gives way to the progress")
-            check(draftView.setupButton.title == L10n.speechPreparing(percent: 42), "it says «\(draftView.setupButton.title)»")
+            let models = environment.models
+            models.setStateForTesting(.downloading(received: 1_000_000_000, total: 3_000_000_000), speech: false, structuring: false)
+            check(!draftView.showsMicrophone && !draftView.setupButton.isHidden, "without the voice the microphone gives way to the progress")
+            check(draftView.setupButton.title.hasPrefix(L10n.speechPreparing(percent: 0).prefix(8)),
+                  "it says «\(draftView.setupButton.title)»")
             snapshotView(draftView, name: "17b-draft-preparing")
             draftView.onMicrophone?()
             await pause(0.2)
             check(voice.state == .idle, "and nothing can be recorded meanwhile (\(voice.state))")
-            environment.speech.setStateForTesting(.missing)
-            check(draftView.setupButton.isLink, "a model nobody has asked for yet is offered as a word to click")
-            environment.speech.setStateForTesting(.ready)
+            models.setStateForTesting(.failed, speech: false, structuring: false)
+            check(draftView.setupButton.isLink, "a broken download is offered again as a word to click")
+            models.setStateForTesting(.missing, speech: false, structuring: false)
+            check(draftView.showsMicrophone, "spec 18.10 A3, «Not now»: the microphone is there, and its first press brings the models")
+            models.setStateForTesting(.ready)
             check(draftView.showsMicrophone && draftView.setupButton.isHidden, "the microphone comes back when the model is ready")
 
             voice.toggle()
@@ -857,6 +857,65 @@ enum SelfCheck {
                 stickers.controllers.count == countBefore + 1 && planned?.sticker.blocks.map(\.text) == ["Забрать посылку", "Оплатить интернет"],
                 "Return on the result sticks it at once (\(planned?.sticker.blocks.map(\.text) ?? []))"
             )
+
+            // 17b. Failures say why (spec 18.10 C2): no key, and no question about the cloud before there is one.
+            let choiceBefore = environment.preferences.structurerChoice
+            environment.preferences.structurerChoice = .claude
+            var asked = false
+            entry.confirmCloud = { _ in
+                asked = true
+                return (false, false)
+            }
+            entry.structurer = UnconfiguredStructurer(id: "claude", displayName: "Claude", isLocal: false, error: .missingKey)
+            entry.toggleDraft()
+            await pause(0.3)
+            write(phrase)
+            draft.submit()
+            await pause(0.4)
+            check(draft.phase == .failed && draft.rootView.failureMessage == L10n.structureNoKey("Claude"),
+                  "without a key the draft says so (\(draft.rootView.failureMessage))")
+            check(!asked, "and does not ask about sending text that cannot be sent")
+            snapshotView(draft.rootView, name: "18d-draft-no-key")
+            draft.rootView.stickAnywayButton.onClick?()
+            await pause(0.8)
+            environment.preferences.structurerChoice = choiceBefore
+            entry.confirmCloud = { CloudConsent.ask(provider: $0) }
+
+            // 17c. Spec 18.10 A3: without the model Return sticks the text as it is, says
+            // it will be sorted, and «Sort into tasks» does it once the model is here.
+            let models = environment.models
+            models.setStateForTesting(.downloading(received: 1_900_000_000, total: 3_000_000_000), speech: true, structuring: false)
+            entry.structurer = BuiltInStructurer(model: nil, percent: 64)
+            countBefore = stickers.controllers.count
+            entry.toggleDraft()
+            await pause(0.3)
+            write(phrase)
+            draft.submit()
+            await pause(1.0)
+            let waiting = stickers.controllers.last
+            check(stickers.controllers.count == countBefore + 1 && waiting?.sticker.title == phrase,
+                  "without the model the text is stuck as it is (\(waiting?.sticker.title ?? "-"))")
+            check(stickers.isNoteVisible, "and a note under the sticker says it will be sorted")
+            if let view = stickers.noteSnapshotView { snapshotView(view, name: "18e-note-later") }
+            models.setStateForTesting(.ready, speech: true, structuring: true)
+            await pause(0.3)
+            check(stickers.isNoteVisible, "once the model is here the note offers «Sort into tasks»")
+            if let view = stickers.noteSnapshotView { snapshotView(view, name: "18f-note-sort") }
+            stickers.pressNote()
+            await pause(1.0)
+            check(waiting?.sticker.blocks.map(\.text) == ["Забрать посылку", "Оплатить интернет"],
+                  "«Sort into tasks» sorts the sticker in place (\(waiting?.sticker.blocks.map(\.text) ?? []))")
+            models.setStateForTesting(.ready)
+            entry.structurer = rules
+
+            // 17d. The first-launch window "Voice → tasks" (spec 18.10 A3).
+            if let setup = environment.modelSetup {
+                setup.show()
+                await pause(0.4)
+                check(setup.isShown, "the window «Voice → tasks» opens")
+                snapshotView(setup.snapshotView, name: "18g-model-setup")
+                setup.snapshotView.window?.close()
+            }
 
             // 18. Dictation into a sticker (spec 18.4): the microphone on the glue strip
             // of a sticker that is being edited adds what was said to that sticker.

@@ -86,19 +86,16 @@ final class EntrySnapshotTests: XCTestCase {
         }
     }
 
-    /// In the microphone's place until the speech model is on this Mac (spec 18.1).
+    /// In the microphone's place while the voice is on its way (spec 18.10 A3).
     func testDraftWithoutTheSpeechModel() {
-        let states: [(String, SpeechSetup.State)] = [
-            ("downloading", .downloading(42)), ("missing", .missing), ("failed", .failed), ("unsupported", .unsupported),
-        ]
+        let states: [(String, DraftView.Voice)] = [("downloading", .preparing(34)), ("failed", .failed), ("unsupported", .unsupported)]
         MarkupHint.forcedRussianLayout = false
         for theme in Self.themes {
             for (name, state) in states {
                 let draft = DraftView(frame: NSRect(x: 0, y: 0, width: 232, height: 160))
                 draft.appearance = NSAppearance(named: theme.appearance)
                 draft.paper = .default
-                draft.speechMegabytes = 445
-                draft.speech = state
+                draft.voice = state
                 draft.refresh()
                 let height = max(draft.height(fittingWidth: 232), 160)
                 draft.frame = NSRect(x: 0, y: 0, width: 232, height: height)
@@ -107,16 +104,17 @@ final class EntrySnapshotTests: XCTestCase {
         }
     }
 
-    /// The first-launch step that brings the speech model (spec 18.1).
+    /// The first-launch window "Voice → tasks" in all its states (spec 18.10 A3).
     func testModelSetup() {
-        let states: [(String, SpeechSetup.State)] = [
-            ("offer", .missing), ("downloading", .downloading(42)), ("ready", .ready), ("failed", .failed),
+        let total: Int64 = 2_950_000_000
+        let states: [(String, ModelSetupView.Stage)] = [
+            ("offer", .offer), ("downloading", .downloading(received: 1_230_000_000, total: total)), ("ready", .ready), ("failed", .failed),
         ]
         for theme in Self.themes {
-            for (name, state) in states {
-                let view = ModelSetupView(megabytes: 445)
+            for (name, stage) in states {
+                let view = ModelSetupView()
                 view.appearance = NSAppearance(named: theme.appearance)
-                view.state = state
+                view.content = ModelSetupView.Content(stage: stage, total: total)
                 view.frame = NSRect(x: 0, y: 0, width: ModelSetupView.width, height: view.preferredHeight)
                 assertSnapshot(of: SnapshotRenderer.image(of: view), as: SnapshotRenderer.strategy, named: "\(theme.name)-\(name)")
             }

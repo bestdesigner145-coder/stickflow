@@ -37,6 +37,9 @@ settings:
 packages:
   StickflowCore:
     path: StickflowCore
+  # The model that takes dictation apart, run by llama.cpp (spec 18.10).
+  StickflowLocalModel:
+    path: LocalModel
   GRDB:
     url: https://github.com/groue/GRDB.swift
     from: "7.0.0"
@@ -60,6 +63,8 @@ targets:
       - path: Tuning.swift
     dependencies:
       - package: StickflowCore
+      - package: StickflowLocalModel
+        product: LocalModel
       - package: GRDB
       - package: KeyboardShortcuts
     info:

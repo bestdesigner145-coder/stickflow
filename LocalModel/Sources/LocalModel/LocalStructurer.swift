@@ -30,6 +30,14 @@ public struct LocalStructurer: Structurer {
         return plan.titled(apartFrom: request.takenTitles, at: request.now)
     }
 
+    /// Loads the model and reads the rules and examples, which every request
+    /// begins with, while the user is still speaking.
+    public func prime() async {
+        guard let format = try? await runner.promptFormat() ?? .chatML(thinkingOff: true) else { return }
+        let prefix = format.prefix(StructurePrompt.messages(for: StructureRequest(text: "")))
+        try? await runner.prefill(prompt: prefix)
+    }
+
     /// The model's plan as it came, before repeats and greetings are taken out,
     /// with what it cost. The report counts the repeats.
     public func draft(_ request: StructureRequest) async throws -> (plan: NotePlan, timings: LlamaTimings) {

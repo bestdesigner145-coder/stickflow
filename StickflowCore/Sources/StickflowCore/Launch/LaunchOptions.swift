@@ -14,6 +14,13 @@ public struct LaunchOptions: Equatable, Sendable {
     public var unknownSeed: String?
     /// `--self-check <directory>`: run the scripted check and write its report there (debug builds).
     public var selfCheckDirectory: String?
+    /// `--demo <sound file>`: the first launch played through with the real models,
+    /// the sound file in place of the microphone; for the video report (spec 17.5a).
+    public var demoAudio: String?
+    /// `--models-root <directory>`: where the models are kept, in place of Application Support.
+    public var modelsRoot: String?
+    /// `--cpu-only`: no GPU for the models; virtual Macs in CI have none to speak of.
+    public var isCPUOnly = false
 
     public init() {}
 
@@ -33,6 +40,14 @@ public struct LaunchOptions: Equatable, Sendable {
                 }
             } else if argument == "--self-check", index + 1 < arguments.count {
                 selfCheckDirectory = arguments[index + 1]
+                index += 1
+            } else if argument == "--cpu-only" {
+                isCPUOnly = true
+            } else if argument == "--demo", index + 1 < arguments.count {
+                demoAudio = arguments[index + 1]
+                index += 1
+            } else if argument == "--models-root", index + 1 < arguments.count {
+                modelsRoot = arguments[index + 1]
                 index += 1
             }
             index += 1

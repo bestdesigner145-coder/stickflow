@@ -38,6 +38,8 @@ final class StickerManager: NSObject {
     private let pointer: PointerTracker
     private let hint = EditHintController()
     private let toast = ToastController()
+    /// Notes under one sticker: "I'll sort it once the model is here" (spec 18.10 A3).
+    private let note = ToastController()
     private lazy var focusReturn = FocusReturnPanel.make()
     let captureWatcher = ScreenCaptureWatcher()
 
@@ -204,6 +206,40 @@ final class StickerManager: NSObject {
         persist(controller)
         return true
     }
+
+    /// The sticker's content becomes `plan`: "Sort into tasks" once the model is here (spec 18.10 A3).
+    func replace(_ plan: NotePlan, in controller: StickerController) {
+        let editor = controller.rootView.textView
+        editor.load(EditorDocument(title: plan.title, blocks: plan.blocks()))
+        controller.blockTextViewDidChangeContent(editor)
+        persist(controller)
+    }
+
+    /// A note under a sticker, with a button when there is something to do.
+    /// - Parameter lasts: seconds; `nil` — until the button is clicked.
+    func note(
+        _ message: String, action title: String = "", under controller: StickerController, lasts: TimeInterval? = -1,
+        perform: @escaping () -> Void = {}
+    ) {
+        guard let screen = displays.screen(containing: controller.paperFrame)
+            ?? displays.stickerScreen(preferredUUID: preferences.stickerDisplayUUID) else { return }
+        note.show(
+            message: message, actionTitle: title, on: screen, tuning: tuning,
+            below: controller.paperFrame, lasts: lasts, action: perform
+        )
+    }
+
+    func hideNote() {
+        note.hide()
+    }
+
+    #if DEBUG
+    var isNoteVisible: Bool { note.isVisible }
+    var noteSnapshotView: NSView? { note.snapshotView }
+    func pressNote() {
+        note.performAction()
+    }
+    #endif
 
     /// Keeps a draft that was closed without sticking (spec 4.3: Esc saves it to history).
     func keepDraft(_ plan: PlainTextPlan.Result, rawInput: String) {

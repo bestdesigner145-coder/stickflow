@@ -50,6 +50,16 @@ public enum ChatProvider: Equatable, Sendable {
         }
     }
 
+    /// Claude and services on the internet take no request without a key;
+    /// Ollama and a server on this Mac need none.
+    public var needsKey: Bool {
+        switch self {
+        case .ollama: false
+        case let .openAICompatible(baseURL, _): !Self.isLoopback(baseURL)
+        case .claude: true
+        }
+    }
+
     static func isLoopback(_ url: URL) -> Bool {
         guard let host = url.host?.lowercased() else { return false }
         return host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "[::1]"
@@ -83,7 +93,7 @@ public enum ChatProvider: Equatable, Sendable {
             if let apiKey, !apiKey.isEmpty { headers["Authorization"] = "Bearer \(apiKey)" }
         case let .claude(model):
             guard let endpoint = URL(string: Self.claudeEndpoint), let apiKey, !apiKey.isEmpty else {
-                throw StructurerError.notConfigured
+                throw StructurerError.missingKey
             }
             url = endpoint
             // The Messages API takes the system text apart from the turns.
@@ -169,15 +179,44 @@ public struct ChatStructurer: Structurer {
 
     private func ask(_ messages: [ChatMessage]) async throws -> String {
         let key = apiKey()
-        var response = try await network.send(provider.request(messages: messages, apiKey: key))
+        // A service on the internet takes no request without a key (spec 18.10 C2).
+        if provider.needsKey, (key ?? "").isEmpty { throw StructurerError.missingKey }
+        var response = try await send(provider.request(messages: messages, apiKey: key))
         if response.status == 400 || response.status == 422, provider.id != "claude" {
             // A server that does not know schema-bound answers: ask plainly, the prompt names the format.
-            response = try await network.send(provider.request(messages: messages, apiKey: key, structured: false))
+            response = try await send(provider.request(messages: messages, apiKey: key, structured: false))
         }
-        switch response.status {
-        case 200..<300: return try provider.text(from: response.data)
-        case 401, 403: throw StructurerError.notConfigured
-        default: throw StructurerError.serverError(response.status)
+        if (200..<300).contains(response.status) { return try provider.text(from: response.data) }
+        throw Self.failure(status: response.status, body: String(bytes: response.data, encoding: .utf8) ?? "")
+    }
+
+    private func send(_ request: URLRequest) async throws -> (data: Data, status: Int) {
+        do {
+            return try await network.send(request)
+        } catch let error as URLError {
+            throw Self.failure(error)
+        }
+    }
+
+    /// What a failed answer means to the user (spec 18.10 C2).
+    public static func failure(status: Int, body: String) -> StructurerError {
+        let text = body.lowercased()
+        switch status {
+        case 401, 403: return .rejectedKey
+        case 402: return .noCredit
+        case 400 where text.contains("credit balance"): return .noCredit
+        case 429 where text.contains("insufficient_quota") || text.contains("balance"): return .noCredit
+        case 404 where text.contains("model"): return .noModel
+        default: return .unavailable(status)
+        }
+    }
+
+    /// No internet, or a service that cannot be reached.
+    public static func failure(_ error: URLError) -> StructurerError {
+        switch error.code {
+        case .notConnectedToInternet, .networkConnectionLost, .dataNotAllowed, .internationalRoamingOff: .offline
+        case .timedOut: .timedOut
+        default: .unavailable(0)
         }
     }
 }

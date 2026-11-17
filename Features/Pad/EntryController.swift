@@ -18,6 +18,13 @@ final class EntryController: NSObject {
     /// Built anew for every request, so that a change of settings applies at once.
     private let makeStructurer: () -> any Structurer
     private var structurerOverride: (any Structurer)?
+    /// The built-in model, whatever the settings say: "Yes" to "Sort it with the built-in model?".
+    private let makeBuiltIn: () -> any Structurer
+    /// Loads the built-in model and reads its rules while the draft is being written.
+    private let primeBuiltIn: () -> Void
+    private let models: ModelsSetup
+    /// A sticker stuck as it was while the model was on its way; "Sort into tasks" once it is here (spec 18.10 A3).
+    private weak var waitingForModel: StickerController?
 
     /// The structurer of the moment. Setting it pins one, for the self-check.
     var structurer: any Structurer {
@@ -58,20 +65,26 @@ final class EntryController: NSObject {
         displays: any ScreenGeometry,
         stickers: StickerManager,
         makeStructurer: @escaping () -> any Structurer,
+        makeBuiltIn: @escaping () -> any Structurer,
+        primeBuiltIn: @escaping () -> Void,
         dictation: Dictation,
         stickerDictation: Dictation,
-        speech: SpeechSetup,
+        models: ModelsSetup,
         clock: any AppClock
     ) {
         self.makeStructurer = makeStructurer
+        self.makeBuiltIn = makeBuiltIn
+        self.primeBuiltIn = primeBuiltIn
+        self.models = models
         self.clock = clock
         self.tuning = tuning
         self.preferences = preferences
         self.displays = displays
         self.stickers = stickers
-        draft = DraftController(tuning: tuning, preferences: preferences, dictation: dictation, speech: speech)
+        draft = DraftController(tuning: tuning, preferences: preferences, dictation: dictation, models: models)
         super.init()
-        let voice = StickerVoice(dictation: stickerDictation, stickers: stickers, speech: speech) { [weak self] text in
+        models.observe { [weak self] in self?.modelsDidChange() }
+        let voice = StickerVoice(dictation: stickerDictation, stickers: stickers, models: models) { [weak self] text in
             await self?.plan(for: text) ?? nil
         }
         // One microphone: the draft's dictation comes first.
@@ -108,6 +121,10 @@ final class EntryController: NSObject {
         draft.onStickAnyway = { [weak self] in
             guard let self, case let .failed(text) = self.pending else { return }
             self.commitAsIs(text)
+        }
+        draft.onUseBuiltIn = { [weak self] in
+            guard let self, case let .failed(text) = self.pending else { return }
+            self.startStructuring(text, with: self.makeBuiltIn())
         }
         draft.onUndoResult = { [weak self] in self?.undoResult() ?? false }
         draft.onCancel = { [weak self] text in
@@ -373,6 +390,8 @@ final class EntryController: NSObject {
         clearPending()
         // One microphone: a dictation into a sticker gives way to the draft.
         voice?.cancel()
+        // The model reads its rules while the user speaks: the answer then comes sooner.
+        if preferences.structurerChoice == .local { primeBuiltIn() }
         let window = padWindowFrame(layout)
         let padLeft = layout.edge.side == .right
             ? window.maxX - CGFloat(tuning.padOpenReach)
@@ -428,13 +447,27 @@ final class EntryController: NSObject {
         }
     }
 
-    private func startStructuring(_ text: String) {
-        var draftRequest = StructureRequest(text: text, locale: .current, now: clock.now)
-        draftRequest.ambiguousHoursAreAfternoon = tuning.rulesAssumeAfternoon
-        let request = draftRequest
-        let structurer = self.structurer
-        // Spec 8.1: nothing goes to a cloud provider before the user has said yes.
-        if !structurer.isLocal, !preferences.cloudConsent.contains(structurer.id) {
+    /// The request for `text`: the titles on screen go along, so that the new one differs (spec 18.7).
+    private func request(for text: String) -> StructureRequest {
+        var request = StructureRequest(text: text, locale: .current, now: clock.now)
+        request.ambiguousHoursAreAfternoon = tuning.rulesAssumeAfternoon
+        request.takenTitles = stickers.controllers.filter { !$0.isClosed }.map(\.sticker.title)
+        return request
+    }
+
+    private func limit(for structurer: any Structurer) -> TimeInterval {
+        if structurer.id == "local" { return tuning.structureTimeoutBuiltIn }
+        return structurer.isLocal ? tuning.structureTimeoutLocal : tuning.structureTimeoutCloud
+    }
+
+    private func startStructuring(_ text: String, with chosen: (any Structurer)? = nil) {
+        let request = request(for: text)
+        let structurer = chosen ?? self.structurer
+        // Spec 8.1: nothing goes to a cloud provider before the user has said yes; and
+        // nothing is asked before there is a key to send it with (spec 18.10 C2).
+        let choice = preferences.structurerChoice
+        let hasKey = !choice.needsKey || KeychainStore.has(choice.account)
+        if !structurer.isLocal, hasKey, !preferences.cloudConsent.contains(structurer.id) {
             draft.keepsOpenWithoutFocus = true
             let answer = confirmCloud(structurer.displayName)
             draft.keepsOpenWithoutFocus = false
@@ -448,7 +481,7 @@ final class EntryController: NSObject {
                 preferences.persist()
             }
         }
-        let limit = structurer.isLocal ? tuning.structureTimeoutLocal : tuning.structureTimeoutCloud
+        let limit = limit(for: structurer)
         pending = .structuring(text)
         draft.showStructuring()
         structuring?.cancel()
@@ -463,10 +496,76 @@ final class EntryController: NSObject {
                 self.commitAsIs(text)
             case let .failure(error) where (error as? StructurerError) == .nothingToDo:
                 self.commitAsIs(text)
-            case .failure:
-                self.pending = .failed(text)
-                self.draft.showFailure()
+            case let .failure(error):
+                self.failed(text, error as? StructurerError)
             }
+        }
+    }
+
+    /// Says why the text was not taken apart, and what can be done (spec 18.10 C2).
+    private func failed(_ text: String, _ error: StructurerError?) {
+        let provider = preferences.structurerChoice.name
+        switch error {
+        case .modelDownloading:
+            // Spec 18.10 A3: stuck as it is now, taken apart once the model is here.
+            commitAsIs(text)
+            noteWaitingForModel()
+            return
+        case .missingKey: pending = .failed(text)
+            draft.showFailure(L10n.structureNoKey(provider), retryable: false)
+        case .rejectedKey: pending = .failed(text)
+            draft.showFailure(L10n.structureBadKey(provider), retryable: false)
+        case .offline: pending = .failed(text)
+            draft.showFailure(L10n.structureOffline, offersBuiltIn: preferences.structurerChoice != .local)
+        case .noCredit: pending = .failed(text)
+            draft.showFailure(L10n.structureNoCredit(provider), retryable: false)
+        case .unavailable: pending = .failed(text)
+            draft.showFailure(L10n.structureUnavailable(provider), offersBuiltIn: preferences.structurerChoice != .local)
+        case .noModel: pending = .failed(text)
+            draft.showFailure(L10n.structureNoModel(provider), retryable: false)
+        case .timedOut: pending = .failed(text)
+            draft.showFailure(L10n.structureTimedOut)
+        default: pending = .failed(text)
+            draft.showFailure(L10n.draftFailed)
+        }
+    }
+
+    /// The sticker just stuck waits for the model: a note under it, and "Sort into
+    /// tasks" when the model is here (spec 18.10 A3).
+    private func noteWaitingForModel() {
+        guard let sticker = stickers.controllers.last(where: { !$0.isClosed }) else { return }
+        waitingForModel = sticker
+        if case .downloading = models.state {
+            stickers.note(L10n.toastStructureLater, under: sticker)
+        } else {
+            // Nobody has asked for the models yet: the note offers them (spec 0.8).
+            stickers.note(L10n.toastStructureLater, action: L10n.toastDownload, under: sticker, lasts: nil) { [weak self] in
+                self?.models.start()
+            }
+        }
+    }
+
+    private func modelsDidChange() {
+        guard models.isStructuringReady, let sticker = waitingForModel, !sticker.isClosed else { return }
+        waitingForModel = nil
+        stickers.note(L10n.toastStructureReady, action: L10n.toastStructure, under: sticker, lasts: nil) { [weak self, weak sticker] in
+            guard let self, let sticker else { return }
+            self.restructure(sticker)
+        }
+    }
+
+    /// "Sort into tasks": the sticker's text as it was said, taken apart now.
+    private func restructure(_ sticker: StickerController) {
+        let text = sticker.sticker.rawInput ?? ""
+        guard !text.isEmpty else { return }
+        let builtIn = makeBuiltIn()
+        var request = request(for: text)
+        request.takenTitles.removeAll { $0 == sticker.sticker.title }
+        let limit = limit(for: builtIn)
+        Task { [weak self, weak sticker] in
+            let outcome = await Self.run(builtIn, request, limit: limit)
+            guard let self, let sticker, !sticker.isClosed, case let .success(plan) = outcome, !plan.isEmpty else { return }
+            self.stickers.replace(plan, in: sticker)
         }
     }
 
@@ -479,7 +578,8 @@ final class EntryController: NSObject {
         await withTaskGroup(of: Result<NotePlan, any Error>.self) { group in
             group.addTask {
                 do {
-                    return try await .success(structurer.structure(request).normalized())
+                    let plan = try await structurer.structure(request).normalized()
+                    return .success(plan.titled(apartFrom: request.takenTitles, at: request.now))
                 } catch {
                     return .failure(error)
                 }
@@ -551,13 +651,12 @@ final class EntryController: NSObject {
     /// structurer failed or found nothing to do. No dialog is put over a sticker:
     /// a cloud provider that has not been allowed yet gives way to the rules.
     func plan(for text: String) async -> NotePlan? {
-        var request = StructureRequest(text: text, locale: .current, now: clock.now)
-        request.ambiguousHoursAreAfternoon = tuning.rulesAssumeAfternoon
+        let request = request(for: text)
         var structurer = self.structurer
         if !structurer.isLocal, !preferences.cloudConsent.contains(structurer.id) {
-            structurer = RuleStructurer()
+            structurer = makeBuiltIn()
         }
-        let limit = structurer.isLocal ? tuning.structureTimeoutLocal : tuning.structureTimeoutCloud
+        let limit = limit(for: structurer)
         guard let plan = try? await Self.run(structurer, request, limit: limit).get(), !plan.isEmpty else { return nil }
         return plan
     }

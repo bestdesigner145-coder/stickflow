@@ -11,7 +11,7 @@ import StickflowCore
 final class StickerVoice {
     private let dictation: Dictation
     private let stickers: StickerManager
-    private let speech: SpeechSetup
+    private let models: ModelsSetup
     /// Takes dictated text apart; `nil` when there is nothing to make of it.
     private let makePlan: @MainActor (String) async -> NotePlan?
     private weak var target: StickerController?
@@ -19,10 +19,10 @@ final class StickerVoice {
     /// True while the draft has the microphone.
     var isBlocked: () -> Bool = { false }
 
-    init(dictation: Dictation, stickers: StickerManager, speech: SpeechSetup, makePlan: @escaping @MainActor (String) async -> NotePlan?) {
+    init(dictation: Dictation, stickers: StickerManager, models: ModelsSetup, makePlan: @escaping @MainActor (String) async -> NotePlan?) {
         self.dictation = dictation
         self.stickers = stickers
-        self.speech = speech
+        self.models = models
         self.makePlan = makePlan
         dictation.onChange = { [weak self] in self?.show() }
         dictation.onText = { [weak self] text in self?.add(text) }
@@ -35,7 +35,7 @@ final class StickerVoice {
         let microphone = controller.rootView.microphone
         microphone.isAvailable = { [weak self] in
             guard let self else { return false }
-            return self.speech.isReady && !self.isBlocked()
+            return self.models.isSpeechReady && !self.isBlocked()
         }
         microphone.onClick = { [weak self, weak controller] in
             guard let self, let controller else { return }
@@ -51,7 +51,7 @@ final class StickerVoice {
     /// The microphone on `controller`'s strip was pressed.
     func toggle(for controller: StickerController) {
         if let target, target !== controller { cancel() }
-        guard speech.isReady, !isBlocked(), work == nil else { return }
+        guard models.isSpeechReady, !isBlocked(), work == nil else { return }
         target = controller
         dictation.toggle()
     }

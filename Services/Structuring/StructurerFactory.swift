@@ -57,30 +57,104 @@ enum KeychainStore {
     }
 }
 
-/// Which structurer the settings ask for (spec 8.1).
+/// Which structurer the settings ask for, in the order of spec 18.10 A4. The
+/// rules are not among them: they are only what is left when the built-in
+/// model fails.
 enum StructurerChoice: String, CaseIterable, Sendable {
-    case rules
-    case ollama
-    case openAICompatible = "openai-compatible"
+    case local
     case claude
+    case chatGPT = "openai"
+    case openAICompatible = "openai-compatible"
+    case ollama
+
+    static let chatGPTDefaultModel = "gpt-5-mini"
+    static let chatGPTBaseURL = "https://api.openai.com"
+    static let deepSeekBaseURL = "https://api.deepseek.com"
+    static let deepSeekModel = "deepseek-chat"
 
     var label: String {
         switch self {
-        case .rules: "Rules (no model)"
-        case .ollama: "Ollama"
-        case .openAICompatible: "OpenAI-compatible"
-        case .claude: "Claude API"
+        case .local: L10n.providerLocal
+        case .claude: "Claude"
+        case .chatGPT: "ChatGPT / OpenAI"
+        case .openAICompatible: L10n.providerCompatible
+        case .ollama: "Ollama / LM Studio"
         }
     }
 
-    var needsKey: Bool { self == .openAICompatible || self == .claude }
+    /// How the provider is named in a sentence: "Нет ключа Claude".
+    var name: String {
+        switch self {
+        case .local: L10n.providerLocal
+        case .claude: "Claude"
+        case .chatGPT: "ChatGPT"
+        case .openAICompatible: "DeepSeek"
+        case .ollama: "Ollama"
+        }
+    }
+
+    var needsKey: Bool { self == .claude || self == .chatGPT || self == .openAICompatible }
+
+    /// The key's name in the Keychain.
+    var account: String { rawValue }
+
+    /// What a key of this provider starts with, for the empty field.
+    var keyPlaceholder: String { self == .claude ? "sk-ant-…" : "sk-…" }
+}
+
+/// The built-in model, or what stands in for it (spec 18.10): the model
+/// itself once it is here; "still downloading" before; the rules when the
+/// model would not load or fell over.
+struct BuiltInStructurer: Structurer {
+    let id = "local"
+    let displayName = L10n.providerLocal
+    let isLocal = true
+    /// `nil` while the model is not on this Mac.
+    let model: (any Structurer)?
+    /// How much of the model is here, for "still downloading — 64 %".
+    let percent: Int
+
+    func health() async -> StructurerHealth {
+        await model?.health() ?? .unavailable("the model is not downloaded")
+    }
+
+    func structure(_ request: StructureRequest) async throws -> NotePlan {
+        guard let model else { throw StructurerError.modelDownloading(percent) }
+        do {
+            return try await model.structure(request)
+        } catch let error as StructurerError {
+            throw error
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            // The model would not load or broke down: the rules, the fallback of spec 18.10 A4.
+            let plan = try await RuleStructurer().structure(request)
+            return plan.titled(apartFrom: request.takenTitles, at: request.now)
+        }
+    }
+}
+
+/// A provider whose settings lack something the user must choose: it says what.
+struct UnconfiguredStructurer: Structurer {
+    let id: String
+    let displayName: String
+    let isLocal: Bool
+    let error: StructurerError
+
+    func health() async -> StructurerHealth {
+        .unavailable("\(error)")
+    }
+
+    func structure(_ request: StructureRequest) async throws -> NotePlan {
+        throw error
+    }
 }
 
 @MainActor
 enum StructurerFactory {
-    /// The structurer the settings describe. Settings that do not add up (no
-    /// model, a host that is not a URL) give the rules, which always work.
-    static func make(from preferences: Preferences, network: any Network) -> any Structurer {
+    /// The structurer the settings describe. Settings that do not add up give
+    /// one that says what is missing, never the rules in silence (spec 18.10 C1).
+    static func make(from preferences: Preferences, network: any Network, builtIn: @autoclosure () -> any Structurer) -> any Structurer {
         func url(_ text: String) -> URL? {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard let url = URL(string: trimmed), url.scheme == "http" || url.scheme == "https", url.host != nil else { return nil }
@@ -90,19 +164,27 @@ enum StructurerFactory {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? nil : trimmed
         }
-        switch preferences.structurerChoice {
-        case .rules:
-            return RuleStructurer()
+        let choice = preferences.structurerChoice
+        let account = choice.account
+        let missing = UnconfiguredStructurer(id: choice.rawValue, displayName: choice.name, isLocal: choice == .ollama, error: .noModel)
+        switch choice {
+        case .local:
+            return builtIn()
         case .ollama:
-            guard let host = url(preferences.ollamaHost), let model = name(preferences.ollamaModel) else { return RuleStructurer() }
+            guard let host = url(preferences.ollamaHost), let model = name(preferences.ollamaModel) else { return missing }
+            if preferences.localServerSpeaksOpenAI {
+                return ChatStructurer(provider: .openAICompatible(baseURL: host, model: model), network: network)
+            }
             return ChatStructurer(provider: .ollama(host: host, model: model), network: network)
         case .openAICompatible:
-            guard let base = url(preferences.openAIBaseURL), let model = name(preferences.openAIModel) else { return RuleStructurer() }
-            let account = StructurerChoice.openAICompatible.rawValue
+            guard let base = url(preferences.openAIBaseURL), let model = name(preferences.openAIModel) else { return missing }
+            let provider = ChatProvider.openAICompatible(baseURL: base, model: model)
+            return ChatStructurer(provider: provider, network: network) { KeychainStore.read(account) }
+        case .chatGPT:
+            guard let base = url(StructurerChoice.chatGPTBaseURL), let model = name(preferences.chatGPTModel) else { return missing }
             let provider = ChatProvider.openAICompatible(baseURL: base, model: model)
             return ChatStructurer(provider: provider, network: network) { KeychainStore.read(account) }
         case .claude:
-            let account = StructurerChoice.claude.rawValue
             let model = name(preferences.claudeModel) ?? ChatProvider.claudeDefaultModel
             return ChatStructurer(provider: .claude(model: model), network: network) { KeychainStore.read(account) }
         }

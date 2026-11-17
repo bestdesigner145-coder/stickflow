@@ -59,13 +59,10 @@ struct TuningPanelView: View {
     let onPreferencesChange: @MainActor () -> Void
 
     @State private var captureStatus = "not checked"
-    @State private var apiKeyDraft = ""
-    @State private var keyStatus = ""
 
     var body: some View {
         Form {
             settingsSection
-            structuringSection
             screenSharingSection
             fadeSection
             editSection
@@ -149,67 +146,6 @@ struct TuningPanelView: View {
         }
     }
 
-    // MARK: Structuring (spec 8.1; moves to the settings window in stage 4)
-
-    private var structuringSection: some View {
-        Section {
-            Picker(selection: $preferences.structurerChoice) {
-                ForEach(StructurerChoice.allCases, id: \.self) { choice in
-                    Text(verbatim: choice.label).tag(choice)
-                }
-            } label: {
-                Text(verbatim: "Structurer")
-            }
-            .onChange(of: preferences.structurerChoice) {
-                preferences.persist()
-                keyStatus = ""
-            }
-            switch preferences.structurerChoice {
-            case .rules:
-                EmptyView()
-            case .ollama:
-                settingField("Host", text: $preferences.ollamaHost)
-                settingField("Model, e.g. qwen3:4b", text: $preferences.ollamaModel)
-            case .openAICompatible:
-                settingField("Base URL, without /v1", text: $preferences.openAIBaseURL)
-                settingField("Model", text: $preferences.openAIModel)
-                keyRow
-            case .claude:
-                settingField("Model", text: $preferences.claudeModel)
-                keyRow
-            }
-        } header: {
-            Text(verbatim: "Structuring (8.1)")
-        } footer: {
-            Text(verbatim: "Rules need nothing. A model on this Mac (Ollama, LM Studio) is asked without questions; "
-                + "before text first goes anywhere else the app asks. Keys are kept in the Keychain. "
-                + "If a host or a model is missing, the rules are used.")
-        }
-    }
-
-    private func settingField(_ title: String, text: Binding<String>) -> some View {
-        TextField(text: text) {
-            Text(verbatim: title)
-        }
-        .onChange(of: text.wrappedValue) { preferences.persist() }
-    }
-
-    private var keyRow: some View {
-        HStack {
-            SecureField(text: $apiKeyDraft) {
-                Text(verbatim: "API key (kept in the Keychain)")
-            }
-            Button {
-                let saved = KeychainStore.save(apiKeyDraft, account: preferences.structurerChoice.rawValue)
-                keyStatus = saved ? (apiKeyDraft.isEmpty ? "removed" : "saved") : "not saved"
-                apiKeyDraft = ""
-            } label: {
-                Text(verbatim: "Save")
-            }
-            Text(verbatim: keyStatus).foregroundStyle(.secondary)
-        }
-    }
-
     // MARK: Tuning
 
     private var fadeSection: some View {
@@ -265,11 +201,11 @@ struct TuningPanelView: View {
                       onChange: onTuningChange)
             SliderRow(title: "Max height, pt", value: $tuning.maxPaperHeight, range: 120...600, step: 1,
                       onChange: onTuningChange)
-            SliderRow(title: "Width S, pt", value: $tuning.widthSmall, range: 140...260, step: 1,
+            SliderRow(title: "Width S, pt", value: $tuning.widthSmall, range: 180...320, step: 1,
                       onChange: onTuningChange)
-            SliderRow(title: "Width M, pt", value: $tuning.widthMedium, range: 180...300, step: 1,
+            SliderRow(title: "Width M, pt", value: $tuning.widthMedium, range: 240...400, step: 1,
                       onChange: onTuningChange)
-            SliderRow(title: "Width L, pt", value: $tuning.widthLarge, range: 220...400, step: 1,
+            SliderRow(title: "Width L, pt", value: $tuning.widthLarge, range: 300...480, step: 1,
                       onChange: onTuningChange)
         } header: {
             Text(verbatim: "Geometry (4.5, 4.6)")
@@ -294,8 +230,6 @@ struct TuningPanelView: View {
                       isOn: $tuning.zoneRejectsFastEntry, onChange: onTuningChange)
             ToggleRow(title: "Rules: «в три» without «дня» means 15:00",
                       isOn: $tuning.rulesAssumeAfternoon, onChange: onTuningChange)
-            ToggleRow(title: "Draft with text closes when focus is lost (kept as a draft)",
-                      isOn: $tuning.draftWithTextClosesOnFocusLoss, onChange: onTuningChange)
             ToggleRow(title: "⌘Z restores a peeled sticker while the toast is up",
                       isOn: $tuning.undoPeelUsesCommandZ, onChange: onTuningChange)
         } header: {

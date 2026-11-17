@@ -31,14 +31,14 @@ final class DraftController: NSObject, NSTextViewDelegate {
 
     /// Voice into the draft (spec 7).
     let dictation: Dictation
-    /// Whether the speech model is on this Mac; no microphone until it is (spec 18.1).
-    let speech: SpeechSetup
+    /// Whether the models are on this Mac; no microphone until speech is (spec 18.1, 18.10).
+    let models: ModelsSetup
 
-    init(tuning: Tuning, preferences: Preferences, dictation: Dictation, speech: SpeechSetup) {
+    init(tuning: Tuning, preferences: Preferences, dictation: Dictation, models: ModelsSetup) {
         self.tuning = tuning
         self.preferences = preferences
         self.dictation = dictation
-        self.speech = speech
+        self.models = models
         rootView = DraftView(frame: NSRect(x: 0, y: 0, width: 232, height: 160))
         super.init()
         panel.contentView = rootView
@@ -54,16 +54,24 @@ final class DraftController: NSObject, NSTextViewDelegate {
                 self.submit()
             }
         }
-        rootView.retryButton.onClick = { [weak self] in self?.onRetry?() }
+        rootView.retryButton.onClick = { [weak self] in
+            guard let self else { return }
+            if self.rootView.offersBuiltIn { self.onUseBuiltIn?() } else { self.onRetry?() }
+        }
         rootView.stickAnywayButton.onClick = { [weak self] in self?.onStickAnyway?() }
         rootView.textView.onUndo = { [weak self] in self?.onUndoResult?() ?? false }
         rootView.onMicrophone = { [weak self] in
-            guard let self, self.speech.isReady else { return }
-            self.dictation.toggle()
+            guard let self else { return }
+            if self.models.isSpeechReady {
+                self.dictation.toggle()
+            } else {
+                // Spec 18.10 A3, "Not now": the first press brings the models, in the background.
+                self.models.start()
+            }
         }
-        // "Download" and "Try again" under the text: the user's own word (spec 0.8).
-        rootView.onSpeechSetup = { [weak self] in self?.speech.start() }
-        speech.observe { [weak self] in self?.speechDidChange() }
+        // "Try again" in the microphone's place: the user's own word (spec 0.8).
+        rootView.onSpeechSetup = { [weak self] in self?.models.start() }
+        models.observe { [weak self] in self?.speechDidChange() }
         rootView.textView.onSpace = { [weak self] in
             // Space stops a recording instead of typing a space (spec 4.3).
             guard let self, self.dictation.state == .recording else { return false }
@@ -95,13 +103,12 @@ final class DraftController: NSObject, NSTextViewDelegate {
     var keepsOpenWithoutFocus = false
 
     /// The keyboard went to another window, or the user switched to another
-    /// desktop. An empty draft closes and leaves nothing behind. A draft with text
-    /// stays where it is, unless the Tuning switch says to put it away as a draft.
+    /// desktop. An empty draft closes and leaves nothing behind. A draft with
+    /// text stays where it is (the author's decision, spec 18.10 E3).
     func attentionDidLeave() {
         // A draft that is listening is in use, wherever the keyboard is.
         guard isOpen, !keepsOpenWithoutFocus, !dictation.isBusy else { return }
-        let isEmpty = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        guard isEmpty || tuning.draftWithTextClosesOnFocusLoss else { return }
+        guard text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         cancel()
     }
 
@@ -118,8 +125,19 @@ final class DraftController: NSObject, NSTextViewDelegate {
         panel.frame
     }
 
+    /// What stands in the microphone's place (spec 18.10 A3).
+    var voice: DraftView.Voice {
+        if !models.isSpeechSupported { return .unsupported }
+        if models.isSpeechReady { return .ready }
+        switch models.state {
+        case .downloading: return .preparing(models.speechPercent)
+        case .failed: return .failed
+        case .missing, .ready: return .ready
+        }
+    }
+
     private func speechDidChange() {
-        rootView.speech = speech.state
+        rootView.voice = voice
         if isOpen { layoutPanel() }
     }
 
@@ -174,8 +192,7 @@ final class DraftController: NSObject, NSTextViewDelegate {
 
         dictation.cancel()
         rootView.setPhase(.writing)
-        rootView.speechMegabytes = speech.megabytes
-        rootView.speech = speech.state
+        rootView.voice = voice
         rootView.paper = preferences.defaultColor
         rootView.pulseDuration = tuning.reduceMotion ? 0 : tuning.scaled(tuning.dictationPulseDuration)
         rootView.textView.string = ""
@@ -206,6 +223,8 @@ final class DraftController: NSObject, NSTextViewDelegate {
     var onStop: (() -> Void)?
     /// "Try again" and "Stick" after a structurer failed.
     var onRetry: (() -> Void)?
+    /// "Yes" to "Sort it with the built-in model?" (spec 18.10 C2).
+    var onUseBuiltIn: (() -> Void)?
     var onStickAnyway: (() -> Void)?
     /// ⌘Z while the result is shown; true means the original text came back.
     var onUndoResult: (() -> Bool)?
@@ -225,8 +244,15 @@ final class DraftController: NSObject, NSTextViewDelegate {
         layoutPanel()
     }
 
-    /// The structurer failed: "Stick as it is?" with two answers.
-    func showFailure() {
+    /// The structurer failed: why, and what can be done (spec 18.10 C2).
+    /// - Parameters:
+    ///   - offersBuiltIn: "Yes" sorts the text with the built-in model instead.
+    ///   - retryable: "Try again" makes sense; otherwise only "Stick" is offered.
+    func showFailure(_ message: String, offersBuiltIn: Bool = false, retryable: Bool = true) {
+        rootView.failureMessage = message
+        rootView.offersBuiltIn = offersBuiltIn
+        rootView.retryButton.set(title: offersBuiltIn ? L10n.structureUseBuiltIn : L10n.draftRetry, isLink: true)
+        rootView.retryButton.isHidden = !(offersBuiltIn || retryable)
         rootView.setPhase(.failed)
         layoutPanel()
     }
@@ -361,21 +387,34 @@ final class DraftView: NSView {
     let stickAnywayButton = PaperTextButton(title: L10n.draftStickAsIs)
     private let spinner = SpinnerView(frame: .zero)
 
-    /// In the microphone's place until the speech model is on this Mac (spec 18.1):
-    /// "Getting recognition ready… 42 %", or a word to click that starts the download.
+    /// What the microphone's place shows (spec 18.1, 18.10 A3).
+    enum Voice: Equatable {
+        /// The microphone. With the models still missing, its first press brings them.
+        case ready
+        /// "Getting voice ready… 34 %".
+        case preparing(Int)
+        /// "Download failed. Try again".
+        case failed
+        /// This macOS cannot run the speech model.
+        case unsupported
+    }
+
+    /// In the microphone's place while the speech model is on its way.
     let setupButton = PaperTextButton(title: "")
     var onSpeechSetup: (() -> Void)?
 
-    var speech = SpeechSetup.State.ready {
+    var voice = Voice.ready {
         didSet {
-            guard speech != oldValue else { return }
+            guard voice != oldValue else { return }
             applyPhase()
             needsLayout = true
         }
     }
 
-    /// Megabytes of the speech model, for "Download".
-    var speechMegabytes = 0
+    /// Why the structurer failed (spec 18.10 C2).
+    var failureMessage = ""
+    /// The left word of a failure is "Yes": sort with the built-in model.
+    var offersBuiltIn = false
 
     /// Seconds per turn of the spinner; 0 leaves it standing.
     var spinnerPeriod: TimeInterval = 0
@@ -405,19 +444,18 @@ final class DraftView: NSView {
         let isWriting = phase == .writing
         textView.isEditable = isWriting
         textView.alphaValue = phase == .structuring ? 0.45 : 1
-        microphone.isHidden = !(isWriting && speech == .ready)
-        setupButton.isHidden = !(isWriting && speech != .ready)
-        switch speech {
+        microphone.isHidden = !(isWriting && voice == .ready)
+        setupButton.isHidden = !(isWriting && voice != .ready)
+        switch voice {
         case .ready: break
-        case .missing: setupButton.set(title: L10n.speechDownload(megabytes: speechMegabytes), isLink: true)
-        case let .downloading(percent): setupButton.set(title: L10n.speechPreparing(percent: percent), isLink: false)
+        case let .preparing(percent): setupButton.set(title: L10n.speechPreparing(percent: percent), isLink: false)
         case .failed: setupButton.set(title: L10n.speechRetry, isLink: true)
         case .unsupported: setupButton.set(title: L10n.speechUnsupported, isLink: false)
         }
         stickButton.isHidden = phase == .failed
         stickButton.icon = phase == .structuring ? .stop : .check
         stickButton.setAccessibilityLabel(phase == .structuring ? L10n.draftStop : L10n.draftStick)
-        retryButton.isHidden = phase != .failed
+        if phase != .failed { retryButton.isHidden = true }
         stickAnywayButton.isHidden = phase != .failed
         spinner.isHidden = phase != .structuring
         spinner.setSpinning(phase == .structuring, period: spinnerPeriod)
@@ -587,7 +625,7 @@ final class DraftView: NSView {
         default: statusLabel.stringValue = ""
         }
         if phase == .failed {
-            messageLabel.stringValue = L10n.draftFailed
+            messageLabel.stringValue = failureMessage.isEmpty ? L10n.draftFailed : failureMessage
         } else {
             // A failure is shown once the dictation is over.
             messageLabel.stringValue = (dictation.state == .idle ? dictation.message : nil) ?? ""

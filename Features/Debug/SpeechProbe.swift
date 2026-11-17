@@ -40,9 +40,9 @@ enum SpeechProbe {
     }
 
     private static func run(files: [String], modelDirectory: String?, units: MLComputeUnits) async throws {
-        let manifest = try SpeechModelManifest.bundled(named: "gigaam-v3-e2e-rnnt")
-        let root = try modelDirectory.map { URL(fileURLWithPath: $0, isDirectory: true) } ?? SpeechModelStore.defaultRoot()
-        let store = SpeechModelStore(manifest: manifest, root: root)
+        let manifest = try ModelManifest.bundled(named: "gigaam-v3-e2e-rnnt")
+        let root = try modelDirectory.map { URL(fileURLWithPath: $0, isDirectory: true) } ?? ModelStore.defaultRoot()
+        let store = ModelStore(manifest: manifest, root: root)
         let engine = GigaAMEngine(store: store, computeUnits: units)
         say("MODEL \(manifest.id) \(manifest.revision.prefix(12)), \(manifest.totalSize / 1_000_000) MB, installed: \(store.isInstalled)")
 

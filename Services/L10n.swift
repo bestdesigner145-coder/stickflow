@@ -53,21 +53,17 @@ enum L10n {
     static var cloudConsentCancel: String { String(localized: "cloud.consent.cancel") }
     static var cloudConsentRemember: String { String(localized: "cloud.consent.remember") }
 
-    /// The speech model (spec 18.1).
+    /// The models (spec 18.1, 18.10 A3).
     static func speechPreparing(percent: Int) -> String {
         String.localizedStringWithFormat(String(localized: "speech.preparing"), percent)
-    }
-
-    static func speechDownload(megabytes: Int) -> String {
-        String.localizedStringWithFormat(String(localized: "speech.download"), megabytes)
     }
 
     static var speechRetry: String { String(localized: "speech.retry") }
     static var speechUnsupported: String { String(localized: "speech.unsupported") }
 
     static var setupTitle: String { String(localized: "setup.title") }
-    static func setupInfo(megabytes: Int) -> String {
-        String.localizedStringWithFormat(String(localized: "setup.info"), megabytes)
+    static func setupInfo(gigabytes: String) -> String {
+        String.localizedStringWithFormat(String(localized: "setup.info"), gigabytes)
     }
 
     static var setupDownload: String { String(localized: "setup.download") }
@@ -75,13 +71,84 @@ enum L10n {
     static var setupHide: String { String(localized: "setup.hide") }
     static var setupClose: String { String(localized: "setup.close") }
     static var setupRetry: String { String(localized: "setup.retry") }
-    static func setupProgress(percent: Int) -> String {
-        String.localizedStringWithFormat(String(localized: "setup.progress"), percent)
+    static func setupProgress(received: String, total: String) -> String {
+        String.localizedStringWithFormat(String(localized: "setup.progress"), received, total)
     }
 
     static var setupReady: String { String(localized: "setup.ready") }
     static var setupFailed: String { String(localized: "setup.failed") }
-    static var setupLaterNote: String { String(localized: "setup.later_note") }
+    static func menuModelsDownloading(percent: Int) -> String {
+        String.localizedStringWithFormat(String(localized: "menu.models_downloading"), percent)
+    }
+
+    static var menuModels: String { String(localized: "menu.models") }
+
+    // Structuring without the model, and its failures (spec 18.10 A3, C2).
+    static var toastStructureLater: String { String(localized: "toast.structure_later") }
+    static var toastStructureReady: String { String(localized: "toast.structure_ready") }
+    static var toastStructure: String { String(localized: "toast.structure") }
+    static var toastDownload: String { String(localized: "toast.download") }
+    static func structureNoKey(_ provider: String) -> String {
+        String.localizedStringWithFormat(String(localized: "structure.error.no_key"), provider)
+    }
+
+    static func structureBadKey(_ provider: String) -> String {
+        String.localizedStringWithFormat(String(localized: "structure.error.bad_key"), provider)
+    }
+
+    static var structureOffline: String { String(localized: "structure.error.offline") }
+    static func structureNoCredit(_ provider: String) -> String {
+        String.localizedStringWithFormat(String(localized: "structure.error.no_credit"), provider)
+    }
+
+    static func structureUnavailable(_ provider: String) -> String {
+        String.localizedStringWithFormat(String(localized: "structure.error.unavailable"), provider)
+    }
+
+    static func structureModelDownloading(percent: Int) -> String {
+        String.localizedStringWithFormat(String(localized: "structure.error.model_downloading"), percent)
+    }
+
+    static func structureNoModel(_ provider: String) -> String {
+        String.localizedStringWithFormat(String(localized: "structure.error.no_model"), provider)
+    }
+
+    static var structureTimedOut: String { String(localized: "structure.error.timed_out") }
+    static var structureUseBuiltIn: String { String(localized: "structure.use_built_in") }
+
+    // The settings window, "Sorting" (spec 18.10 C1).
+    static var settingsTitle: String { String(localized: "settings.title") }
+    static var providerLocal: String { String(localized: "provider.local") }
+    static var providerCompatible: String { String(localized: "provider.compatible") }
+    static var settingsProvider: String { String(localized: "settings.provider") }
+    static var settingsLocalNote: String { String(localized: "settings.local_note") }
+    static var settingsCloudNote: String { String(localized: "settings.cloud_note") }
+    static var settingsModel: String { String(localized: "settings.model") }
+    static var settingsSize: String { String(localized: "settings.size") }
+    static var settingsGB: String { String(localized: "settings.gb") }
+    static var settingsDelete: String { String(localized: "settings.delete") }
+    static var settingsNotDownloaded: String { String(localized: "settings.not_downloaded") }
+    static var settingsAddress: String { String(localized: "settings.address") }
+    static var settingsHowToStart: String { String(localized: "settings.how_to_start") }
+    static var settingsAskAgain: String { String(localized: "settings.ask_again") }
+    static var settingsOllamaNotRunning: String { String(localized: "settings.ollama_not_running") }
+    static var settingsOllamaNote: String { String(localized: "settings.ollama_note") }
+    static func settingsKeySaved(_ end: String) -> String {
+        String.localizedStringWithFormat(String(localized: "settings.key_saved"), end)
+    }
+
+    static var settingsNoKey: String { String(localized: "settings.no_key") }
+    static var settingsKey: String { String(localized: "settings.key") }
+    static var settingsNewKey: String { String(localized: "settings.new_key") }
+    static var settingsSave: String { String(localized: "settings.save") }
+    static var settingsCheck: String { String(localized: "settings.check") }
+    static var settingsDeleteKey: String { String(localized: "settings.delete_key") }
+    static var settingsKeyNote: String { String(localized: "settings.key_note") }
+    static var settingsKeyWorks: String { String(localized: "settings.key_works") }
+    static var settingsOffline: String { String(localized: "settings.offline") }
+    static func settingsNoAnswer(_ provider: String) -> String {
+        String.localizedStringWithFormat(String(localized: "settings.no_answer"), provider)
+    }
 
     /// "## heading · - point · [] task" under the placeholder (spec 18.5).
     static func markupHint(heading: String, task: String) -> String {

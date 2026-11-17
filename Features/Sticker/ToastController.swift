@@ -27,12 +27,18 @@ final class ToastController: NSObject {
     var isVisible: Bool { panel?.isVisible ?? false }
 
     /// Shows the toast, replacing any previous one.
-    /// - Parameter action: runs when the button is clicked; the toast then closes.
+    /// - Parameters:
+    ///   - actionTitle: empty — a note without a button.
+    ///   - paper: the sticker the toast speaks of: it appears under it, not at the bottom of the screen.
+    ///   - lasts: seconds on screen; `nil` — until its button is clicked or it is replaced.
+    ///   - action: runs when the button is clicked; the toast then closes.
     func show(
         message: String,
         actionTitle: String,
         on screen: ScreenInfo,
         tuning: Tuning,
+        below paper: CGRect? = nil,
+        lasts: TimeInterval? = -1,
         action: @escaping () -> Void
     ) {
         let panel = self.panel ?? makePanel()
@@ -50,13 +56,15 @@ final class ToastController: NSObject {
         )
         label.sizeToFit()
         button.sizeToFit()
+        button.isHidden = actionTitle.isEmpty
+        if actionTitle.isEmpty { button.frame.size = .zero }
 
         let padding: CGFloat = 14
         let gap: CGFloat = 12
         let height: CGFloat = 36
         let labelSize = label.frame.size
         let buttonSize = button.frame.size
-        let width = padding + ceil(labelSize.width) + gap + ceil(buttonSize.width) + padding
+        let width = padding + ceil(labelSize.width) + (actionTitle.isEmpty ? 0 : gap + ceil(buttonSize.width)) + padding
         label.frame = NSRect(
             x: padding,
             y: ((height - labelSize.height) / 2).rounded(),
@@ -71,15 +79,23 @@ final class ToastController: NSObject {
         )
 
         let visible = screen.visibleFrame
-        let target = NSRect(
+        var target = NSRect(
             x: (visible.midX - width / 2).rounded(),
             y: visible.minY + 24,
             width: width,
             height: height
         )
+        if let paper {
+            // Under the sticker, its left edges lined up, kept on the screen.
+            target.origin.x = min(max(paper.minX, visible.minX + 8), visible.maxX - width - 8).rounded()
+            target.origin.y = paper.minY - 8 - height
+            if target.minY < visible.minY + 8 { target.origin.y = min(paper.maxY + 8, visible.maxY - height - 8) }
+        }
 
         NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(timeoutFired), object: nil)
-        perform(#selector(timeoutFired), with: nil, afterDelay: tuning.toastDuration)
+        if let lasts {
+            perform(#selector(timeoutFired), with: nil, afterDelay: lasts < 0 ? tuning.toastDuration : lasts)
+        }
 
         let reduceMotion = tuning.reduceMotion
         let shift = reduceMotion ? 0 : CGFloat(tuning.toastShift)

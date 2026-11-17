@@ -50,13 +50,22 @@ public enum PromptFormat: Equatable, Sendable {
     public func render(_ messages: [ChatMessage]) -> String {
         switch self {
         case let .chatML(thinkingOff):
-            var text = ""
-            for message in messages {
-                text += "<|im_start|>\(message.role.rawValue)\n\(message.content)<|im_end|>\n"
-            }
-            text += "<|im_start|>assistant\n"
-            if thinkingOff { text += "<think>\n\n</think>\n\n" }
-            return text
+            turns(messages) + "<|im_start|>assistant\n" + (thinkingOff ? "<think>\n\n</think>\n\n" : "")
+        case .gemma:
+            turns(messages) + "<start_of_turn>model\n"
+        }
+    }
+
+    /// The part of the prompt that is the same for every request: everything
+    /// before the last turn. The model reads it once and keeps it.
+    public func prefix(_ messages: [ChatMessage]) -> String {
+        turns(Array(messages.dropLast()))
+    }
+
+    private func turns(_ messages: [ChatMessage]) -> String {
+        switch self {
+        case .chatML:
+            return messages.map { "<|im_start|>\($0.role.rawValue)\n\($0.content)<|im_end|>\n" }.joined()
         case .gemma:
             var text = "<bos>"
             var pendingSystem = ""
@@ -71,7 +80,7 @@ public enum PromptFormat: Equatable, Sendable {
                     text += "<start_of_turn>model\n\(message.content)<end_of_turn>\n"
                 }
             }
-            return text + "<start_of_turn>model\n"
+            return text
         }
     }
 }

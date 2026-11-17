@@ -20,6 +20,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let output = SelfCheck.outputDirectory {
                 SelfCheck.run(in: environment, output: output)
             }
+            if let audio = environment.options.demoAudio {
+                DemoRun.run(in: environment, audio: URL(fileURLWithPath: audio))
+            }
             #endif
         } catch {
             // Without storage there is nothing useful the app can do.

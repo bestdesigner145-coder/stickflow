@@ -3,45 +3,43 @@
 
 import AppKit
 
-/// The first-launch step that brings the speech model to this Mac (spec 18.1):
-/// what will be downloaded and how big it is, a button that starts it, the
-/// progress. Nothing is downloaded before the button is pressed (spec 0.8).
-/// The window may be closed at any time; a download that has started goes on.
+/// The first-launch window "Voice → tasks" (spec 18.10 A3): what will be
+/// downloaded and how big it is, a button that starts it, the progress.
+/// Nothing is downloaded before the button is pressed (spec 0.8). The window
+/// may be closed at any time; a download that has started goes on.
 @MainActor
 final class ModelSetupController: NSObject {
-    private let speech: SpeechSetup
-    private let preferences: Preferences
+    private let models: ModelsSetup
     private var window: NSWindow?
     private let view: ModelSetupView
 
-    init(speech: SpeechSetup, preferences: Preferences) {
-        self.speech = speech
-        self.preferences = preferences
-        view = ModelSetupView(megabytes: speech.megabytes)
+    init(models: ModelsSetup) {
+        self.models = models
+        view = ModelSetupView()
         super.init()
         view.onPrimary = { [weak self] in self?.primary() }
         view.onSecondary = { [weak self] in self?.window?.close() }
-        speech.observe { [weak self] in
-            guard let self else { return }
-            self.view.state = self.speech.state
-        }
+        models.observe { [weak self] in self?.refresh() }
     }
 
-    /// Shows the step once, at the first launch without the model.
+    /// Shown at launch for as long as a model is missing (spec 18.10 E5).
     func offerIfNeeded() {
-        guard speech.state == .missing, !preferences.speechModelOffered else { return }
-        preferences.speechModelOffered = true
-        preferences.persist()
+        guard models.state == .missing || models.state == .failed else { return }
         show()
     }
 
     func show() {
-        view.state = speech.state
+        refresh()
         let window = self.window ?? makeWindow()
         self.window = window
+        window.setContentSize(NSSize(width: ModelSetupView.width, height: view.preferredHeight))
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate()
+    }
+
+    private func refresh() {
+        view.content = ModelSetupView.Content(models: models)
     }
 
     private func makeWindow() -> NSWindow {
@@ -57,26 +55,65 @@ final class ModelSetupController: NSObject {
     }
 
     private func primary() {
-        switch speech.state {
-        case .missing, .failed: speech.start()
-        case .downloading, .ready, .unsupported: window?.close()
+        switch models.state {
+        case .missing, .failed: models.start()
+        case .downloading, .ready: window?.close()
         }
     }
+
+    #if DEBUG
+    /// For the self-check.
+    var isShown: Bool { window?.isVisible ?? false }
+    var snapshotView: NSView { view }
+    func pressPrimary() {
+        primary()
+    }
+    #endif
 }
 
-/// The content of the step: system type, thin and calm (spec 6.1).
+/// The content of the window: system type, calm (spec 6.1); the texts of spec 18.10 A3 word for word.
 final class ModelSetupView: NSView {
-    static let width: CGFloat = 400
+    static let width: CGFloat = 420
     private static let padding: CGFloat = 24
+
+    /// What the window says.
+    enum Stage: Equatable {
+        case offer
+        case downloading(received: Int64, total: Int64)
+        case ready
+        case failed
+    }
+
+    struct Content: Equatable {
+        var stage: Stage
+        var total: Int64
+
+        init(stage: Stage, total: Int64) {
+            self.stage = stage
+            self.total = total
+        }
+
+        @MainActor
+        init(models: ModelsSetup) {
+            total = models.totalBytes
+            switch models.state {
+            case .missing: stage = .offer
+            case let .downloading(received, total): stage = .downloading(received: received, total: total)
+            case .ready: stage = .ready
+            case .failed: stage = .failed
+            }
+        }
+    }
 
     var onPrimary: (() -> Void)?
     var onSecondary: (() -> Void)?
 
-    var state = SpeechSetup.State.missing {
-        didSet { apply() }
+    var content = Content(stage: .offer, total: 3_000_000_000) {
+        didSet {
+            if content != oldValue { apply() }
+        }
     }
 
-    private let megabytes: Int
     private let titleLabel = NSTextField(labelWithString: L10n.setupTitle)
     private let infoLabel = NSTextField(wrappingLabelWithString: "")
     private let statusLabel = NSTextField(wrappingLabelWithString: "")
@@ -84,12 +121,10 @@ final class ModelSetupView: NSView {
     private let primaryButton = NSButton(title: "", target: nil, action: nil)
     private let secondaryButton = NSButton(title: "", target: nil, action: nil)
 
-    init(megabytes: Int) {
-        self.megabytes = megabytes
-        super.init(frame: NSRect(x: 0, y: 0, width: Self.width, height: 200))
-        titleLabel.font = NSFont.systemFont(ofSize: 15, weight: .semibold)
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        titleLabel.font = NSFont.systemFont(ofSize: 17, weight: .semibold)
         infoLabel.font = NSFont.systemFont(ofSize: 13)
-        infoLabel.stringValue = L10n.setupInfo(megabytes: megabytes)
         infoLabel.isSelectable = false
         statusLabel.font = NSFont.systemFont(ofSize: 12)
         statusLabel.textColor = .secondaryLabelColor
@@ -97,19 +132,23 @@ final class ModelSetupView: NSView {
         progress.style = .bar
         progress.isIndeterminate = false
         progress.minValue = 0
-        progress.maxValue = 100
+        progress.maxValue = 1
         progress.controlSize = .small
-        primaryButton.bezelStyle = .rounded
+        primaryButton.bezelStyle = .push
         primaryButton.keyEquivalent = "\r"
         primaryButton.target = self
         primaryButton.action = #selector(primaryClicked)
-        secondaryButton.bezelStyle = .rounded
+        secondaryButton.bezelStyle = .push
         secondaryButton.target = self
         secondaryButton.action = #selector(secondaryClicked)
         for subview in [titleLabel, infoLabel, progress, statusLabel, secondaryButton, primaryButton] {
             addSubview(subview)
         }
         apply()
+    }
+
+    convenience init() {
+        self.init(frame: NSRect(x: 0, y: 0, width: Self.width, height: 200))
     }
 
     @available(*, unavailable)
@@ -127,19 +166,28 @@ final class ModelSetupView: NSView {
         onSecondary?()
     }
 
+    /// "1,2" and "3": gigabytes the way people say them.
+    static func gigabytes(_ bytes: Int64) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 1
+        return formatter.string(from: NSNumber(value: (Double(bytes) / 1e9 * 10).rounded() / 10)) ?? "0"
+    }
+
     private func apply() {
+        infoLabel.stringValue = L10n.setupInfo(gigabytes: Self.gigabytes(content.total))
         var primary = L10n.setupClose
         var secondary: String?
-        var showsProgress = false
-        switch state {
-        case .missing:
-            statusLabel.stringValue = L10n.setupLaterNote
+        var shown: Double?
+        switch content.stage {
+        case .offer:
+            statusLabel.stringValue = ""
             primary = L10n.setupDownload
             secondary = L10n.setupLater
-        case let .downloading(percent):
-            statusLabel.stringValue = L10n.setupProgress(percent: percent)
-            progress.doubleValue = Double(percent)
-            showsProgress = true
+        case let .downloading(received, total):
+            statusLabel.stringValue = L10n.setupProgress(received: Self.gigabytes(received), total: Self.gigabytes(total))
+            shown = total > 0 ? Double(received) / Double(total) : 0
             primary = L10n.setupHide
         case .ready:
             statusLabel.stringValue = L10n.setupReady
@@ -147,10 +195,9 @@ final class ModelSetupView: NSView {
             statusLabel.stringValue = L10n.setupFailed
             primary = L10n.setupRetry
             secondary = L10n.setupLater
-        case .unsupported:
-            statusLabel.stringValue = L10n.speechUnsupported
         }
-        progress.isHidden = !showsProgress
+        progress.isHidden = shown == nil
+        progress.doubleValue = shown ?? 0
         primaryButton.title = primary
         secondaryButton.title = secondary ?? ""
         secondaryButton.isHidden = secondary == nil
@@ -165,27 +212,27 @@ final class ModelSetupView: NSView {
 
     /// Height of the window's content; the same in every state, so that the window does not jump.
     var preferredHeight: CGFloat {
-        Self.padding + 20 + 10 + height(of: infoLabel) + 16 + 8 + 8 + 34 + 20 + 30 + Self.padding - 4
+        Self.padding + 22 + 10 + height(of: infoLabel) + 18 + 8 + 8 + 34 + 16 + 30 + Self.padding
     }
 
     override func layout() {
         super.layout()
         let padding = Self.padding
         var top = padding
-        titleLabel.frame = NSRect(x: padding, y: top, width: textWidth, height: 20)
-        top += 20 + 10
+        titleLabel.frame = NSRect(x: padding, y: top, width: textWidth, height: 22)
+        top += 22 + 10
         let infoHeight = height(of: infoLabel)
         infoLabel.frame = NSRect(x: padding, y: top, width: textWidth, height: infoHeight)
-        top += infoHeight + 16
+        top += infoHeight + 18
         progress.frame = NSRect(x: padding, y: top, width: textWidth, height: 8)
         top += 8 + 8
         statusLabel.frame = NSRect(x: padding, y: top, width: textWidth, height: 34)
-        let buttonY = bounds.height - padding - 26
+        let buttonY = bounds.height - padding - 28
         primaryButton.sizeToFit()
-        let primaryWidth = max(primaryButton.frame.width, 88)
-        primaryButton.frame = NSRect(x: bounds.width - padding - primaryWidth + 4, y: buttonY, width: primaryWidth, height: 30)
+        let primaryWidth = max(primaryButton.frame.width + 12, 96)
+        primaryButton.frame = NSRect(x: bounds.width - padding - primaryWidth + 6, y: buttonY, width: primaryWidth, height: 30)
         secondaryButton.sizeToFit()
-        let secondaryWidth = max(secondaryButton.frame.width, 88)
-        secondaryButton.frame = NSRect(x: primaryButton.frame.minX - 6 - secondaryWidth, y: buttonY, width: secondaryWidth, height: 30)
+        let secondaryWidth = max(secondaryButton.frame.width + 12, 96)
+        secondaryButton.frame = NSRect(x: primaryButton.frame.minX - 4 - secondaryWidth, y: buttonY, width: secondaryWidth, height: 30)
     }
 }

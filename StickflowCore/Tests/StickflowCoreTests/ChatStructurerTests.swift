@@ -164,7 +164,7 @@ final class ChatStructurerTests: XCTestCase {
         XCTAssertEqual(sent["max_tokens"] as? Int, 2048)
         XCTAssertEqual((sent["messages"] as? [[String: String]])?.map { $0["role"] ?? "" }, ["user", "assistant", "user"])
         XCTAssertThrowsError(try claude.request(messages: messages, apiKey: nil)) { error in
-            XCTAssertEqual(error as? StructurerError, .notConfigured)
+            XCTAssertEqual(error as? StructurerError, .missingKey)
         }
         XCTAssertThrowsError(try claude.request(messages: messages, apiKey: ""))
 
@@ -259,14 +259,27 @@ final class ChatStructurerTests: XCTestCase {
             }
         }
         var result = await failure([("", 401)], provider: openAI)
-        XCTAssertEqual(result, .notConfigured)
+        XCTAssertEqual(result, .rejectedKey)
         result = await failure([("", 503)], provider: ollama)
-        XCTAssertEqual(result, .serverError(503))
+        XCTAssertEqual(result, .unavailable(503))
         // Claude is not asked twice about a request it refused.
         result = await failure([("", 400), ("", 200)], provider: claude)
-        XCTAssertEqual(result, .serverError(400))
+        XCTAssertEqual(result, .unavailable(400))
         result = await failure([], provider: claude, key: nil)
-        XCTAssertEqual(result, .notConfigured)
+        XCTAssertEqual(result, .missingKey, "no key: nothing is sent")
+        result = await failure([(#"{"error":{"message":"Your credit balance is too low"}}"#, 400)], provider: claude)
+        XCTAssertEqual(result, .noCredit)
+        result = await failure([(#"{"error":{"code":"insufficient_quota"}}"#, 429)], provider: openAI)
+        XCTAssertEqual(result, .noCredit)
+        result = await failure([("", 402)], provider: openAI)
+        XCTAssertEqual(result, .noCredit)
+        result = await failure([("", 529)], provider: claude)
+        XCTAssertEqual(result, .unavailable(529))
+        result = await failure([(#"{"error":"model 'qwen3:4b' not found"}"#, 404)], provider: ollama)
+        XCTAssertEqual(result, .noModel)
+        XCTAssertEqual(ChatStructurer.failure(URLError(.notConnectedToInternet)), .offline)
+        XCTAssertEqual(ChatStructurer.failure(URLError(.timedOut)), .timedOut)
+        XCTAssertEqual(ChatStructurer.failure(URLError(.cannotConnectToHost)), .unavailable(0))
         let keyless = ChatStructurer(provider: claude, network: ScriptedNetwork([]))
         let health = await keyless.health()
         XCTAssertEqual(health, .unavailable("no API key"))

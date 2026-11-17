@@ -103,6 +103,12 @@ public final class LlamaRunner: @unchecked Sendable {
         }
     }
 
+    /// Loads the model and reads `prompt` without answering, so that a request
+    /// that begins with it only reads what follows.
+    public func prefill(prompt: String) async throws {
+        _ = try await perform { runner in try runner.read(prompt).count }
+    }
+
     /// Frees the memory now; the next request loads the model again.
     public func unload() {
         queue.async { [self] in free() }
@@ -173,21 +179,17 @@ public final class LlamaRunner: @unchecked Sendable {
         lastLoad = Date().timeIntervalSince(started)
     }
 
-    private func answer(prompt: String, grammar: String) throws -> (text: String, timings: LlamaTimings) {
-        var timings = LlamaTimings()
-        lastLoad = 0
+    /// Reads the prompt into the context: only what differs from what it already holds.
+    /// - Returns: the prompt's tokens, and how many of them were there already.
+    private func read(_ prompt: String) throws -> (tokens: [llama_token], count: Int, reused: Int) {
         try loadIfNeeded()
-        timings.loading = lastLoad
-        guard let model, let context, let batch else { throw LocalModelError.contextFailed }
-        guard let vocab = llama_model_get_vocab(model) else { throw LocalModelError.contextFailed }
+        guard let model, let context, let batch, let vocab = llama_model_get_vocab(model) else {
+            throw LocalModelError.contextFailed
+        }
         let tokens = tokenize(prompt, vocab: vocab)
-        timings.promptTokens = tokens.count
         guard tokens.count + settings.maxAnswerTokens <= Int(settings.contextLength), !tokens.isEmpty else {
             throw LocalModelError.tooLong(tokens: tokens.count)
         }
-
-        // The prompt: only what differs from what the context already holds.
-        var started = Date()
         let memory = llama_get_memory(context)
         var common = zip(cached, tokens).prefix { pair in pair.0 == pair.1 }.count
         // The last token is read again: its logits start the answer.
@@ -197,7 +199,6 @@ public final class LlamaRunner: @unchecked Sendable {
             common = 0
         }
         cached = Array(tokens.prefix(common))
-        timings.reused = common
         var position = common
         while position < tokens.count {
             try checkStopped()
@@ -210,7 +211,23 @@ public final class LlamaRunner: @unchecked Sendable {
             cached.append(contentsOf: tokens[position..<end])
             position = end
         }
-        timings.prompt = Date().timeIntervalSince(started)
+        return (tokens, tokens.count, common)
+    }
+
+    private func answer(prompt: String, grammar: String) throws -> (text: String, timings: LlamaTimings) {
+        var timings = LlamaTimings()
+        lastLoad = 0
+        var started = Date()
+        let prompted = try read(prompt)
+        timings.loading = lastLoad
+        timings.prompt = Date().timeIntervalSince(started) - lastLoad
+        timings.promptTokens = prompted.count
+        timings.reused = prompted.reused
+        guard let model, let context, let batch, let vocab = llama_model_get_vocab(model) else {
+            throw LocalModelError.contextFailed
+        }
+        let memory = llama_get_memory(context)
+        var position = prompted.count
 
         // The answer, one token at a time, each one allowed by the grammar.
         started = Date()

@@ -172,10 +172,20 @@ public enum StructurerError: Error, Equatable, Sendable {
     case nothingToDo
     case timedOut
     case invalidAnswer
-    /// The provider lacks something of the user's: a key, or the key was refused.
-    case notConfigured
-    /// The service answered with this HTTP status.
-    case serverError(Int)
+    /// A provider that needs a key has none (spec 18.10 C2).
+    case missingKey
+    /// The provider refused the key.
+    case rejectedKey
+    /// There is no internet.
+    case offline
+    /// The account has no money left.
+    case noCredit
+    /// The service did not answer, or failed with this HTTP status (0: no answer at all).
+    case unavailable(Int)
+    /// No model is chosen, or the server has no such model.
+    case noModel
+    /// The built-in model is still on its way; how much of it is here, in percent.
+    case modelDownloading(Int)
 }
 
 /// Turns raw text into a plan (spec 8.1). The rules, a local model and the

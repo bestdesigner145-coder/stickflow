@@ -59,6 +59,9 @@ jobs:
       - name: Localization
         run: python3 scripts/check-localization.py
 
+      - name: Shell scripts
+        run: python3 scripts/check-scripts.py
+
   build:
     name: Build and test (${{ matrix.os }})
     needs: lint
@@ -103,6 +106,17 @@ jobs:
             -derivedDataPath build/DerivedData \
             STICKFLOW_COMMIT="${GITHUB_SHA::7}" \
             -quiet 2>&1 | tee build.log
+
+      # Spec 18.10 E2: a build must leave the repository as it was, or `git pull` stops.
+      - name: The build changed no file
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git status --short
+            git diff
+            for file in $(git diff --name-only -- '*.xcstrings'); do echo "-----BEGIN ${file}-----"; cat "${file}"; echo "-----END ${file}-----"; done
+            exit 1
+          fi
 
       - name: Build app (Release)
         run: |
@@ -273,91 +287,3 @@ jobs:
           APP=build/DerivedData/Build/Products/Debug/Stickflow.app/Contents/MacOS/Stickflow
           "$APP" --transcribe asr/*.wav --model-dir "$RUNNER_TEMP/models" --cpu-only 2>&1 | tee asr/log.txt
           python3 scripts/check-transcripts.py asr/log.txt
-
-  # Spec 18.10 A5: the set through every candidate model, run inside the
-  # process by llama.cpp as the app runs it, on an arm64 runner. One runner per
-  # model, in parallel. Gigabytes of downloads, so only for a commit whose
-  # message has [llm], or by hand.
-  llm:
-    name: Model report (${{ matrix.candidate.name }})
-    needs: lint
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[llm]') }}
-    runs-on: macos-15
-    timeout-minutes: 150
-    strategy:
-      fail-fast: false
-      matrix:
-        candidate:
-          - { name: baseline }
-          - { name: qwen3-4b, repo: Qwen/Qwen3-4B-GGUF }
-          - { name: qwen3-4b-2507, repo: unsloth/Qwen3-4B-Instruct-2507-GGUF }
-          - { name: qwen3.5-4b, repo: unsloth/Qwen3.5-4B-GGUF }
-          - { name: qvikhr-3-4b, repo: Vikhrmodels/QVikhr-3-4B-Instruction-GGUF }
-          - { name: gemma-3-4b, repo: unsloth/gemma-3-4b-it-GGUF }
-          - { name: qwen3-1.7b, repo: unsloth/Qwen3-1.7B-GGUF }
-    env:
-      # The ceiling of spec 18.10 A5, when the repository has the key.
-      ANTHROPIC_API_KEY: ${{ matrix.candidate.name == 'baseline' && secrets.ANTHROPIC_API_KEY || '' }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Machine
-        run: |
-          uname -m
-          sysctl -n machdep.cpu.brand_string hw.memsize hw.perflevel0.physicalcpu || true
-          system_profiler SPDisplaysDataType | grep -E "Chipset|Metal" || true
-          df -h "$RUNNER_TEMP" | tail -1
-
-      - name: Build the report
-        run: swift build -c release --package-path LocalModel --product stickflow-report
-
-      - name: Download the model
-        if: ${{ matrix.candidate.repo }}
-        run: |
-          mkdir -p report
-          python3 scripts/fetch-gguf.py "${{ matrix.candidate.repo }}" Q4_K_M.gguf "$RUNNER_TEMP/model.gguf" report/facts.json
-        env:
-          PYTHONUNBUFFERED: "1"
-
-      - name: Report
-        run: |
-          mkdir -p report
-          BIN="$(swift build -c release --package-path LocalModel --show-bin-path)/stickflow-report"
-          args=(--fixtures StickflowCore/Tests/StickflowCoreTests/StructuringFixtures/semantic.json
-                --machine "GitHub $(uname -m), $(sysctl -n machdep.cpu.brand_string), $(( $(sysctl -n hw.memsize) / 1073741824 )) ГБ"
-                --output report/report.md --json report/summary.json)
-          if [ -n "${{ matrix.candidate.repo }}" ]; then args+=(--no-rules --local "${{ matrix.candidate.name }}=$RUNNER_TEMP/model.gguf"); fi
-          # Metal first; a runner whose GPU cannot take the model runs it on the CPU.
-          "$BIN" "${args[@]}" || STICKFLOW_GPU_LAYERS=0 "$BIN" "${args[@]}"
-          sed -n '1,20p' report/report.md
-
-      - name: Upload the report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: report-${{ matrix.candidate.name }}
-          path: report
-          if-no-files-found: ignore
-
-  llm-summary:
-    name: Model report, all candidates
-    needs: llm
-    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[llm]')) }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: report-*
-          path: reports
-      - name: Combine
-        run: |
-          python3 scripts/combine-reports.py reports summary.md
-          cat summary.md >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: model-choice
-          path: |
-            summary.md
-            reports
