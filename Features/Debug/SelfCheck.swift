@@ -883,7 +883,6 @@ enum SelfCheck {
 
             // 17c. Spec 18.10 A3: without the model Return sticks the text as it is, says
             // it will be sorted, and «Sort into tasks» does it once the model is here.
-            let models = environment.models
             models.setStateForTesting(.downloading(received: 1_900_000_000, total: 3_000_000_000), speech: true, structuring: false)
             entry.structurer = BuiltInStructurer(model: nil, percent: 64)
             countBefore = stickers.controllers.count

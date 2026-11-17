@@ -17,7 +17,7 @@ enum DemoRun {
         Task { @MainActor in
             let caption = DemoCaption()
             var log: [String] = []
-            func say(_ text: String) {
+            @MainActor func say(_ text: String) {
                 caption.show(text)
                 log.append("\(Date()) \(text)")
                 FileHandle.standardError.write(Data("DEMO \(text)\n".utf8))
@@ -25,7 +25,7 @@ enum DemoRun {
             func pause(_ seconds: Double) async {
                 try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
             }
-            func wait(_ limit: Double, until done: () -> Bool) async -> Bool {
+            @MainActor func wait(_ limit: Double, until done: @MainActor () -> Bool) async -> Bool {
                 let end = Date().addingTimeInterval(limit)
                 while Date() < end {
                     if done() { return true }
