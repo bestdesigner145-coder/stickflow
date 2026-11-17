@@ -179,7 +179,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
     }
 
-    #if DEBUG
     @objc private func showSettings() {
         environment.showSettings()
     }
@@ -188,6 +187,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         environment.showModelSetup()
     }
 
+    #if DEBUG
     @objc private func showTuningPanel() {
         environment.showTuningPanel()
     }
