@@ -48,6 +48,15 @@ Tuning.swift     every tunable number in one place
 
 Forking? Change the bundle identifier (`STICKFLOW_BUNDLE_ID` in `project.yml`) before you distribute a build.
 
+## Models · Модели
+
+Voice to tasks runs on this Mac, offline, with two models the app downloads once, at the user's request (about 3 GB), from this repository's Releases or, as a fallback, from Hugging Face; every file is checked against its SHA-256 sum:
+
+- speech: [GigaAM-v3](https://github.com/salute-developers/GigaAM) e2e RNNT, Core ML conversion by smkrv, MIT;
+- sorting into tasks: [Gemma 3 4B Instruct](https://huggingface.co/google/gemma-3-4b-it), GGUF Q4_K_M by Unsloth, run by [llama.cpp](https://github.com/ggml-org/llama.cpp). Gemma is provided under and subject to the Gemma Terms of Use found at [ai.google.dev/gemma/terms](https://ai.google.dev/gemma/terms).
+
+Голос → задачи работает на этом Mac без интернета: две модели (≈3 ГБ) скачиваются один раз по действию пользователя.
+
 ## License · Лицензия
 
-GPL-3.0. See `LICENSE`.
+GPL-3.0. See `LICENSE`. The models keep their own licences (above).

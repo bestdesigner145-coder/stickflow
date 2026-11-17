@@ -1,0 +1,49 @@
+{
+  "id": "gemma-3-4b-it-q4km",
+  "name": "Gemma 3 4B Instruct, Q4_K_M",
+  "revision": "5a3566e716d80f709ed7b79817eaf7733d2a1fce",
+  "license": "Gemma Terms of Use",
+  "sources": {
+    "release": "https://github.com/bestdesigner145-coder/stickflow/releases/download/model-structuring-gemma-3-4b-1/",
+    "huggingFace": "https://huggingface.co/unsloth/gemma-3-4b-it-GGUF/resolve/5a3566e716d80f709ed7b79817eaf7733d2a1fce/"
+  },
+  "files": [
+    {
+      "path": "gemma-3-4b-it-Q4_K_M.gguf",
+      "size": 2489894016,
+      "sha256": "04a43a22e8d2003deda5acc262f68ec1005fa76c735a9962a8c77042a74a7d19",
+      "parts": [
+        {
+          "asset": "gemma-3-4b-it-q4km.gguf.part00",
+          "offset": 0,
+          "size": 536870912,
+          "sha256": "17c2025ba7327b3bc0f7730c1846159a5ad678bacae1f5aaba2e36c3c259a92c"
+        },
+        {
+          "asset": "gemma-3-4b-it-q4km.gguf.part01",
+          "offset": 536870912,
+          "size": 536870912,
+          "sha256": "6b0c3aa3956bb6b30c6ca977d9a9c7a426c3301daebc45c357adcd3e80c2facc"
+        },
+        {
+          "asset": "gemma-3-4b-it-q4km.gguf.part02",
+          "offset": 1073741824,
+          "size": 536870912,
+          "sha256": "26c1375fc6818920a5e2718d8af9600548d879b3c79de761ca687ece8fd7b84c"
+        },
+        {
+          "asset": "gemma-3-4b-it-q4km.gguf.part03",
+          "offset": 1610612736,
+          "size": 536870912,
+          "sha256": "64c1ca58d4c3da6bee5e6155ada53c7bb480d2a7d3f8182b726be3749edb29b7"
+        },
+        {
+          "asset": "gemma-3-4b-it-q4km.gguf.part04",
+          "offset": 2147483648,
+          "size": 342410368,
+          "sha256": "5dc3aca88a956180f47fdd76adceedbf5f6dbc3edfd8343aff72013ea8e24dc5"
+        }
+      ]
+    }
+  ]
+}
