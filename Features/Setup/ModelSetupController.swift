@@ -175,8 +175,13 @@ final class ModelSetupView: NSView {
         return formatter.string(from: NSNumber(value: (Double(bytes) / 1e9 * 10).rounded() / 10)) ?? "0"
     }
 
+    /// The size of the whole download, in whole gigabytes, as spec 18.10 A3 says it: "3 GB".
+    static func wholeGigabytes(_ bytes: Int64) -> String {
+        bytes < 1_000_000_000 ? gigabytes(bytes) : String(Int((Double(bytes) / 1e9).rounded()))
+    }
+
     private func apply() {
-        infoLabel.stringValue = L10n.setupInfo(gigabytes: Self.gigabytes(content.total))
+        infoLabel.stringValue = L10n.setupInfo(gigabytes: Self.wholeGigabytes(content.total))
         var primary = L10n.setupClose
         var secondary: String?
         var shown: Double?
@@ -186,7 +191,7 @@ final class ModelSetupView: NSView {
             primary = L10n.setupDownload
             secondary = L10n.setupLater
         case let .downloading(received, total):
-            statusLabel.stringValue = L10n.setupProgress(received: Self.gigabytes(received), total: Self.gigabytes(total))
+            statusLabel.stringValue = L10n.setupProgress(received: Self.gigabytes(received), total: Self.wholeGigabytes(total))
             shown = total > 0 ? Double(received) / Double(total) : 0
             primary = L10n.setupHide
         case .ready:
