@@ -61,6 +61,6 @@ final class SettingsSnapshotTests: XCTestCase {
         XCTAssertEqual(ModelSetupView.gigabytes(1_230_000_000).filter(\.isNumber), "12")
         XCTAssertEqual(ModelSetupView.gigabytes(0), "0")
         XCTAssertEqual(ModelSetupView.wholeGigabytes(2_935_000_000), "3", "the whole download is said as in spec 18.10 A3")
-        XCTAssertEqual(ModelSetupView.wholeGigabytes(445_000_000).filter(\.isNumber), "4")
+        XCTAssertEqual(ModelSetupView.wholeGigabytes(445_000_000).filter(\.isNumber), "04", "less than a gigabyte keeps its tenth")
     }
 }
