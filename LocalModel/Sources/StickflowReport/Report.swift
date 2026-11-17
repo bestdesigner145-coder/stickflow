@@ -216,7 +216,8 @@ enum Report {
                 score.duplicates += outcome.merged
                 if semantic.inPrompt {
                     let verdict = outcome.plan.map { semantic.verdict(for: $0) }
-                    regressions[String(semantic.input.prefix(40))] = verdict.map { $0.grouped && $0.titled != false && $0.junk == 0 } ?? false
+                    let passed = verdict.map { $0.grouped && $0.titled != false && $0.junk == 0 } ?? false
+                    regressions[String(semantic.input.prefix(40))] = passed
                 }
             }
             for (index, phrase) in phrases.enumerated() {
