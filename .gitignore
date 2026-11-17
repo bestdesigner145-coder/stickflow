@@ -24,3 +24,6 @@ sparkle_private_key*
 ed25519*
 .env
 .env.*
+
+# Logs of a CI build
+/build.log
