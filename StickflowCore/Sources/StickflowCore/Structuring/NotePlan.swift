@@ -149,6 +149,8 @@ public struct StructureRequest: Sendable {
     /// Read an hour from 1 to 7 said without "утра" or "дня" as afternoon
     /// ("в три" is 15:00). Off: such an hour is left as it was said.
     public var ambiguousHoursAreAfternoon = false
+    /// Titles of the stickers on screen; a new one must differ from them (spec 18.7).
+    public var takenTitles: [String] = []
 
     public init(text: String, mode: Mode = .new, rules: String = "", locale: Locale = .current, now: Date = Date()) {
         self.text = text

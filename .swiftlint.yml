@@ -5,10 +5,12 @@ included:
   - Services
   - StickflowCore/Sources
   - StickflowCore/Tests
+  - LocalModel/Sources
   - Tests
   - Tuning.swift
 excluded:
   - StickflowCore/.build
+  - LocalModel/.build
   - build
 
 # SwiftFormat owns layout; these keep the two tools from arguing.

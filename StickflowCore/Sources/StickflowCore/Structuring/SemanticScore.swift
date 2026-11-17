@@ -3,6 +3,10 @@
 
 import Foundation
 
+private enum SemanticGroupKey: String, CodingKey {
+    case heading, items, ordered
+}
+
 /// One phrase of the set that checks structuring by meaning (spec 18.3): what
 /// was said, which items must come out of it and how they must be grouped.
 ///
@@ -13,10 +17,20 @@ public struct SemanticCase: Decodable, Equatable, Sendable {
         /// Either of these must be in the section's heading; `nil` — any heading or none.
         public var heading: [String]?
         public var items: [[String]]
+        /// The items must come in this order (spec 18.9: in the order they are best done).
+        public var ordered: Bool
 
-        public init(heading: [String]? = nil, items: [[String]]) {
+        public init(heading: [String]? = nil, items: [[String]], ordered: Bool = false) {
             self.heading = heading
             self.items = items
+            self.ordered = ordered
+        }
+
+        public init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: SemanticGroupKey.self)
+            heading = try container.decodeIfPresent([String].self, forKey: .heading)
+            items = try container.decode([[String]].self, forKey: .items)
+            ordered = try container.decodeIfPresent(Bool.self, forKey: .ordered) ?? false
         }
     }
 
@@ -29,17 +43,27 @@ public struct SemanticCase: Decodable, Equatable, Sendable {
     public var junk: [String]
     /// False when more than one grouping is reasonable: grouping is not scored then.
     public var scoresGrouping: Bool
+    /// Either of these must be in the title (spec 18.7); `nil` — the title is not scored.
+    public var title: [String]?
+    /// The phrase is one of the prompt's examples (spec 18.9 asks for that): a
+    /// model has seen the answer, so its result here proves less.
+    public var inPrompt: Bool
 
-    public init(input: String, groups: [Group], optional: [[String]] = [], junk: [String] = [], scoresGrouping: Bool = true) {
+    public init(
+        input: String, groups: [Group], optional: [[String]] = [], junk: [String] = [], scoresGrouping: Bool = true,
+        title: [String]? = nil, inPrompt: Bool = false
+    ) {
         self.input = input
         self.groups = groups
         self.optional = optional
         self.junk = junk
         self.scoresGrouping = scoresGrouping
+        self.title = title
+        self.inPrompt = inPrompt
     }
 
     private enum CodingKeys: String, CodingKey {
-        case input, groups, optional, junk, scoresGrouping
+        case input, groups, optional, junk, scoresGrouping, title, inPrompt
     }
 
     public init(from decoder: any Decoder) throws {
@@ -49,6 +73,8 @@ public struct SemanticCase: Decodable, Equatable, Sendable {
         optional = try container.decodeIfPresent([[String]].self, forKey: .optional) ?? []
         junk = try container.decodeIfPresent([String].self, forKey: .junk) ?? []
         scoresGrouping = try container.decodeIfPresent(Bool.self, forKey: .scoresGrouping) ?? true
+        title = try container.decodeIfPresent([String].self, forKey: .title)
+        inPrompt = try container.decodeIfPresent(Bool.self, forKey: .inPrompt) ?? false
     }
 
     /// How one plan did on this phrase.
@@ -61,6 +87,8 @@ public struct SemanticCase: Decodable, Equatable, Sendable {
         public var junk = 0
         /// Everything found, items of one group together, groups apart, named groups named.
         public var grouped = false
+        /// The title names the topic; `nil` when the phrase does not score its title.
+        public var titled: Bool?
     }
 
     static func fold(_ text: String) -> String {
@@ -88,22 +116,28 @@ public struct SemanticCase: Decodable, Equatable, Sendable {
             }
         }
         var verdict = Verdict()
+        if let title { verdict.titled = title.contains { Self.has([$0], in: Self.fold(plan.title)) } }
         // Where each expected item ended up: the section, or nil when it is not in the plan.
         var places: [[Int?]] = []
+        var inOrder = true
         for group in groups {
             var row: [Int?] = []
+            var positions: [Int] = []
             for needles in group.items {
                 verdict.expected += 1
                 // An item of its own first; a thing said as a detail of another item counts too.
                 if let own = entries.firstIndex(where: { !$0.used && Self.has(needles, in: $0.text) }) {
                     entries[own].used = true
                     row.append(entries[own].section)
+                    positions.append(own)
                 } else if let inside = entries.firstIndex(where: { Self.has(needles, in: $0.whole) }) {
                     row.append(entries[inside].section)
+                    positions.append(inside)
                 } else {
                     row.append(nil)
                 }
             }
+            if group.ordered, positions != positions.sorted() || Set(positions).count != positions.count { inOrder = false }
             verdict.found += row.compactMap { $0 }.count
             places.append(row)
         }
@@ -112,7 +146,7 @@ public struct SemanticCase: Decodable, Equatable, Sendable {
         }
         verdict.extra = entries.filter { !$0.used }.count
         verdict.junk = entries.filter { entry in junk.contains { entry.whole.contains(Self.fold($0)) } }.count
-        verdict.grouped = verdict.found == verdict.expected && isGrouped(places, in: plan)
+        verdict.grouped = verdict.found == verdict.expected && inOrder && isGrouped(places, in: plan)
         return verdict
     }
 
@@ -149,6 +183,9 @@ public struct SemanticScore: Equatable, Sendable {
     /// Items the model repeated, before the cleaning took them out.
     public var duplicates = 0
     public var mustKeep = 0
+    /// Answers whose title names the topic, of the phrases that score it.
+    public var titleCases = 0
+    public var titled = 0
     public var kept = 0
     public var items = 0
     public var words = 0
@@ -165,6 +202,7 @@ public struct SemanticScore: Equatable, Sendable {
         let tokens = StructuringMetrics.mustKeep(in: semantic.input)
         mustKeep += tokens.count
         if semantic.scoresGrouping { groupingCases += 1 }
+        if semantic.title != nil { titleCases += 1 }
         let nothingExpected = semantic.groups.isEmpty
         guard let raw else {
             // "Nothing to do" is the right answer to a phrase with nothing to do in it.
@@ -183,6 +221,7 @@ public struct SemanticScore: Equatable, Sendable {
         extra += verdict.extra
         junk += verdict.junk
         if semantic.scoresGrouping, verdict.grouped, !nothingExpected || plan.isEmpty { grouped += 1 }
+        if verdict.titled == true { titled += 1 }
         kept += StructuringMetrics.kept(tokens, in: plan)
         items += plan.items.count
         words += plan.items.reduce(0) { $0 + $1.text.split(separator: " ").count }
@@ -191,6 +230,7 @@ public struct SemanticScore: Equatable, Sendable {
     public var answeredShare: Double { cases == 0 ? 0 : Double(answered) / Double(cases) }
     public var groupedShare: Double { groupingCases == 0 ? 0 : Double(grouped) / Double(groupingCases) }
     public var foundShare: Double { expected == 0 ? 0 : Double(found) / Double(expected) }
+    public var titledShare: Double { titleCases == 0 ? 0 : Double(titled) / Double(titleCases) }
     public var keptShare: Double { mustKeep == 0 ? 1 : Double(kept) / Double(mustKeep) }
     public var wordsPerItem: Double { items == 0 ? 0 : Double(words) / Double(items) }
 

@@ -13,8 +13,6 @@ let package = Package(
     ],
     targets: [
         .target(name: "StickflowCore"),
-        // The report on structuring by meaning (spec 8.6, 18.3); see scripts/structure-report.sh.
-        .executableTarget(name: "stickflow-report", dependencies: ["StickflowCore"], path: "Sources/StickflowReport"),
         .testTarget(
             name: "StickflowCoreTests",
             dependencies: ["StickflowCore"],

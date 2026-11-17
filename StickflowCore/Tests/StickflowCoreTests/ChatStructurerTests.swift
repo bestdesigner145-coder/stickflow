@@ -46,7 +46,8 @@ final class ChatStructurerTests: XCTestCase {
         XCTAssertEqual(Array(messages.map(\.role).prefix(3)), [.system, .user, .assistant])
         XCTAssertEqual(messages.last?.role, .user)
         // Spec 18.2: grouping by meaning, no repeats, no greetings.
-        XCTAssertTrue(messages[0].content.contains("Группируй по смыслу"))
+        XCTAssertTrue(messages[0].content.contains("Секции — темы"))
+        XCTAssertTrue(messages[0].content.contains("Не пересказывай"), "spec 18.9")
         XCTAssertTrue(messages[0].content.contains("не новый пункт"))
         XCTAssertTrue(messages[0].content.contains("не задачи"))
         XCTAssertTrue(messages[0].content.contains("Один пункт — одно действие"))

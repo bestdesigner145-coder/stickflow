@@ -110,8 +110,8 @@ final class SemanticTests: XCTestCase {
             for needle in needles {
                 XCTAssertEqual(needle, SemanticCase.fold(needle), "needles are written folded: \(needle)")
             }
-            // No example of the prompt is in the set: a model must not have seen the answer.
-            XCTAssertFalse(StructurePrompt.examples.contains { $0.said == semantic.input })
+            // Only the two regressions of spec 18.9 are both in the set and in the prompt, and they say so.
+            XCTAssertEqual(semantic.inPrompt, StructurePrompt.examples.contains { $0.said == semantic.input }, semantic.input)
             // The rules run through every phrase without giving up on the form.
             let plan = RuleStructurer.plan(from: semantic.input)
             XCTAssertEqual(plan, plan.normalized())
@@ -131,7 +131,8 @@ final class SemanticTests: XCTestCase {
         ]).cleaned()
         var verdict = card.verdict(for: sticker)
         XCTAssertEqual([verdict.expected, verdict.found, verdict.extra, verdict.junk], [2, 2, 0, 1])
-        XCTAssertFalse(verdict.grouped, "nothing names the card")
+        XCTAssertTrue(verdict.grouped, "one topic needs no section of its own")
+        XCTAssertEqual(verdict.titled, false, "but the title must name it")
 
         verdict = card.verdict(for: plan("Виртуальная карта", [(nil, ["Заменить иконку на главном экране", "Проверить лимиты"])]))
         XCTAssertEqual([verdict.found, verdict.extra, verdict.junk], [2, 0, 0])
@@ -145,7 +146,7 @@ final class SemanticTests: XCTestCase {
     }
 
     func testVerdictOnThreeGroups() throws {
-        let three = try cases()[2]
+        let three = try XCTUnwrap(cases().first { $0.input.hasPrefix("Нужно обновить иконки") })
         let right = plan("План на сегодня", [
             ("Дизайн-система", ["Обновить иконки", "Поправить тени у карточек"]),
             ("Лендинг", ["Написать текст первого экрана", "Подобрать фото"]),
