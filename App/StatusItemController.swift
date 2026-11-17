@@ -87,6 +87,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         #if DEBUG
         menu.addItem(.separator())
         menu.addItem(makeItem("Tuning…", action: #selector(showTuningPanel)))
+        // Which build this is: the quickest answer to "am I running the new one?".
+        menu.addItem(makeItem(L10n.menuBuild(BuildStamp.text), action: nil, enabled: false))
         #endif
 
         menu.addItem(.separator())

@@ -100,6 +100,7 @@ jobs:
             -configuration Debug \
             -destination 'platform=macOS' \
             -derivedDataPath build/DerivedData \
+            STICKFLOW_COMMIT="${GITHUB_SHA::7}" \
             -quiet 2>&1 | tee build.log
 
       - name: Build app (Release)
@@ -199,6 +200,14 @@ jobs:
             base64 -b 160 -i "$file"
             echo "-----END $(basename "$file")-----"
           done
+
+      # The author's one command: it must build, and the build must know its commit.
+      - name: scripts/run.sh
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          scripts/run.sh --build-only
+          plist=build/DerivedData/Build/Products/Debug/Stickflow.app/Contents/Info.plist
+          /usr/libexec/PlistBuddy -c "Print :StickflowCommit" "$plist" | grep -q "$(git rev-parse --short HEAD)"
 
       # The PR build of spec 17.1: download, unzip, run.
       - name: Package debug build

@@ -16,6 +16,8 @@ settings:
     MACOSX_DEPLOYMENT_TARGET: "14.0"
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
+    # Set on the command line by scripts/run.sh and by CI; empty in a build from Xcode.
+    STICKFLOW_COMMIT: ""
     # Bundle ID is permanent: permissions, settings and updates are tied to it.
     STICKFLOW_BUNDLE_ID: io.github.stickflow
     # Warnings are errors in every configuration (spec 17.3).
@@ -76,6 +78,8 @@ targets:
         # Russian texts are in Resources/InfoPlist.xcstrings.
         NSMicrophoneUsageDescription: "Stickflow records your voice only while the microphone in the draft is on, to turn it into task text. The recording is not kept."
         NSHumanReadableCopyright: "Stickflow contributors. Free software under GPL-3.0."
+        # The commit the build was made from, shown in the menu; see scripts/run.sh.
+        StickflowCommit: $(STICKFLOW_COMMIT)
     settings:
       base:
         PRODUCT_NAME: Stickflow

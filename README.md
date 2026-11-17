@@ -13,15 +13,16 @@ Requirements: macOS 14 or later, Xcode 16 or later, [XcodeGen](https://github.co
 
 ```sh
 brew install xcodegen
-xcodegen generate
-open Stickflow.xcodeproj
+git pull && scripts/run.sh
 ```
 
-Run the `Stickflow` scheme. The app has no Dock icon: look for the sticker icon in the menu bar.
+The script regenerates the project, builds, closes the copy that is running and starts the new one. The app has no Dock icon: look for the sticker icon in the menu bar; its menu says which build it is, e.g. "Build 17.11 11:40 · 78793aa".
+
+To work in Xcode: `xcodegen generate && open Stickflow.xcodeproj`, then run the `Stickflow` scheme.
 
 The Xcode project is generated from `project.yml` and is not committed. Run `xcodegen generate` again after pulling changes that add or remove files.
 
-Проект Xcode собирается из `project.yml` и в репозитории не хранится. После обновления, в котором появились или исчезли файлы, запустите `xcodegen generate` ещё раз.
+Проект Xcode собирается из `project.yml` и в репозитории не хранится. После обновления, в котором появились или исчезли файлы, запустите `xcodegen generate` ещё раз — или просто `git pull && scripts/run.sh`: скрипт пересоберёт проект, закроет запущенную копию и запустит новую. Какая сборка запущена, написано в меню иконки: «Сборка 17.11 11:40 · 78793aa».
 
 ## Tests · Тесты
 

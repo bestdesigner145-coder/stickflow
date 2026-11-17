@@ -18,6 +18,9 @@ enum L10n {
     static var menuCheckUpdates: String { String(localized: "menu.check_updates") }
     static var menuLaunchAtLogin: String { String(localized: "menu.launch_at_login") }
     static var menuQuit: String { String(localized: "menu.quit") }
+    static func menuBuild(_ stamp: String) -> String {
+        String.localizedStringWithFormat(String(localized: "menu.build"), stamp)
+    }
 
     static var stickerMenuPaperColor: String { String(localized: "sticker.menu.paper_color") }
     static var stickerMenuPeel: String { String(localized: "sticker.menu.peel") }
