@@ -107,6 +107,16 @@ final class StickerEditTests: XCTestCase {
         XCTAssertEqual(result.blocks.last?.text, "Согласовать тексты с юристами")
     }
 
+    func testPointsGoUnderALineOnlyWhenALineIsNamed() {
+        let answer = StickerEdit(operations: [.addChildren(target: 1, items: ["Обновить тексты в онбординге"])])
+        XCTAssertEqual(
+            answer.held(to: "ещё надо обновить тексты в онбординге").operations,
+            [.addItems([NotePlan.Section(items: [NotePlan.Item(text: "Обновить тексты в онбординге")])])]
+        )
+        XCTAssertEqual(answer.held(to: "добавь в пункт про калькулятор: тексты").operations, answer.operations)
+        XCTAssertEqual(answer.held(to: "К задаче про экран добавь тексты").operations, answer.operations)
+    }
+
     func testUnsureOrUnknownLineChangesNothing() {
         XCTAssertThrowsError(try apply(#"{"unsure": true, "ops": []}"#)) {
             XCTAssertEqual($0 as? StickerEdit.Failure, .unclearLine)

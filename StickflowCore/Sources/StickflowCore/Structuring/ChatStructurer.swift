@@ -183,7 +183,7 @@ public struct ChatStructurer: Structurer {
     /// operations, so the answer's format is named by the prompt alone.
     public func edit(_ request: StickerEditRequest) async throws -> StickerEdit {
         let messages = StickerEditPrompt.messages(for: request)
-        return try await StickerEdit.parse(ask(messages, structured: false))
+        return try await StickerEdit.parse(ask(messages, structured: false)).held(to: request.text)
     }
 
     private func ask(_ messages: [ChatMessage], structured: Bool = true) async throws -> String {

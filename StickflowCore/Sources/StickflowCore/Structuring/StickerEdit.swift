@@ -53,6 +53,26 @@ public struct StickerEdit: Equatable, Sendable {
     }
 }
 
+// MARK: - What was said decides
+
+public extension StickerEdit {
+    /// Words that point at a line to add under ("добавь в пункт про…", "к задаче…").
+    static let childCues = ["в пункт", "к пункт", "под пункт", "подпункт", "в задач", "к задач", "под задач", "в строк", "к строк"]
+
+    /// The answer, held to what was said: points go under a line only when a line
+    /// was named. A small model puts a plain thought under a line that looks like
+    /// it; such a thought is a new line (spec 18.22).
+    func held(to said: String) -> StickerEdit {
+        let text = said.lowercased()
+        guard !Self.childCues.contains(where: text.contains) else { return self }
+        let operations = operations.map { operation -> Operation in
+            guard case let .addChildren(_, items) = operation else { return operation }
+            return .addItems([NotePlan.Section(items: items.map { NotePlan.Item(text: $0) })])
+        }
+        return StickerEdit(unsure: unsure, operations: operations)
+    }
+}
+
 // MARK: - The sticker as the model sees it
 
 public extension StickerEdit {

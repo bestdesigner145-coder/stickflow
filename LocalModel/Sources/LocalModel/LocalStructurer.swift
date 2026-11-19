@@ -37,7 +37,7 @@ public struct LocalStructurer: Structurer {
         let format = try await runner.promptFormat() ?? .chatML(thinkingOff: true)
         let prompt = format.render(StickerEditPrompt.messages(for: request))
         let answer = try await runner.generate(prompt: prompt, grammar: StickerEditPrompt.grammar)
-        return try StickerEdit.parse(answer.text)
+        return try StickerEdit.parse(answer.text).held(to: request.text)
     }
 
     /// Loads the model and reads the rules and examples, which every request
