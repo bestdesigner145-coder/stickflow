@@ -700,6 +700,15 @@ final class EntryController: NSObject {
     #if DEBUG
     /// For the self-check's snapshots.
     var padSnapshotView: NSView { padView }
+    /// The pad's layer as the self-check sees it: animations, model and drawn position.
+    var padMotionNote: String {
+        guard let layer = padContainer.layer else { return "no layer" }
+        let shown = layer.presentation()
+        return "animations \(layer.animationKeys() ?? []), model x \(layer.position.x), "
+            + "drawn x \(shown.map { "\($0.position.x)" } ?? "nil"), frame x \(padContainer.frame.minX), "
+            + "superlayer \(layer.superlayer != nil), phase \(phase)"
+    }
+
     /// Where the pad is drawn right now, in the middle of a move: how much of it
     /// is out of the screen edge, and its opacity (fix K1).
     var padOnScreen: (reach: CGFloat, opacity: Float) {

@@ -74,8 +74,16 @@ extension NSView {
             layer.removeAnimation(forKey: "slideMove")
             return
         }
+        // Both ends given: AppKit may move the layer's model to the new frame only
+        // in its next display pass, and a move "to the model" would then be no move (fix K1).
+        let toPosition = CGPoint(
+            x: origin.x + layer.anchorPoint.x * frame.width,
+            y: origin.y + layer.anchorPoint.y * frame.height
+        )
         let move = CABasicAnimation(keyPath: "position")
         move.fromValue = NSValue(point: fromPosition)
+        move.toValue = NSValue(point: toPosition)
+        move.fillMode = .backwards
         move.duration = duration
         move.timingFunction = curve.timingFunction
         layer.add(move, forKey: "slideMove")

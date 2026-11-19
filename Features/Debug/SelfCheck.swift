@@ -518,13 +518,16 @@ enum SelfCheck {
                 // Fix K1: the pad goes back as it came out, slowly at first; it does not vanish.
                 let reachOut = entry.padOnScreen.reach
                 hold(far, for: 0.5)
+                note("pad going back, at once: \(entry.padMotionNote)")
                 await pause(0.07)
+                note("pad going back, 70 ms: \(entry.padMotionNote)")
                 let early = entry.padOnScreen.reach
                 await pause(0.3)
                 check(entry.phase == .idle && entry.padOnScreen.reach < 1, "the cursor leaves and the pad goes back")
                 check(early > reachOut * 0.5,
                       "a third of the way in time the pad is still mostly out (\(Int(early)) of \(Int(reachOut)) pt)")
                 // With "Reduce motion" it fades where it is, 150 ms.
+                let motionBefore = tuning.forcedReduceMotion
                 tuning.forcedReduceMotion = true
                 hold(spot, for: 0.7)
                 await pause(0.4)
@@ -536,7 +539,7 @@ enum SelfCheck {
                 check(fading.opacity > 0.1 && fading.opacity < 0.9 && fading.reach > reachOut - 1,
                       "with Reduce motion it fades in place (opacity \(fading.opacity), \(Int(fading.reach)) pt)")
                 check(entry.padOnScreen.opacity < 0.01, "and is gone once faded")
-                tuning.forcedReduceMotion = nil
+                tuning.forcedReduceMotion = motionBefore
                 hold(spot, for: 0.7)
                 await pause(0.4)
 
