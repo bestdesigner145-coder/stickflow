@@ -9,9 +9,9 @@ import StickflowCore
 /// (spec 18.22) through the built-in model, on a sticker the prompt's examples
 /// do not show. Each case says what a right answer does.
 enum EditReport {
-    struct Case {
+    struct Case: Sendable {
         let said: String
-        let right: (StickerEdit) -> Bool
+        let right: @Sendable (StickerEdit) -> Bool
     }
 
     static let blocks = [
