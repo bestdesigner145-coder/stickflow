@@ -234,6 +234,15 @@ final class AppEnvironment {
     // MARK: Debug panel
 
     #if DEBUG
+    /// The ordinary windows of the app, for the self-check (fix K2).
+    var appWindows: [(name: String, window: NSWindow?)] {
+        [
+            ("settings", settingsWindow?.shownWindow),
+            ("Tuning", tuningPanel?.shownWindow),
+            ("Voice → tasks", modelSetup?.snapshotView.window),
+        ]
+    }
+
     func showTuningPanel() {
         if tuningPanel == nil {
             tuningPanel = TuningPanelController(environment: self)

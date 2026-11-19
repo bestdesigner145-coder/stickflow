@@ -435,10 +435,11 @@ final class SettingsWindowController {
         model.refreshBuiltIn()
         let window = self.window ?? makeWindow()
         self.window = window
-        window.center()
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate()
+        WindowPresenter.present(window)
     }
+
+    /// The window, once it has been shown; for the self-check.
+    var shownWindow: NSWindow? { window }
 
     private func makeWindow() -> NSWindow {
         let host = NSHostingController(rootView: StructuringSettingsView(model: model))

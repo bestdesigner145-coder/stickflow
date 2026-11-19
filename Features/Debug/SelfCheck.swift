@@ -515,6 +515,29 @@ enum SelfCheck {
                     _ = captureScreen(entry.padWindowFrameForSnapshot.insetBy(dx: -20, dy: -20), on: screen, name: "12b-screen-pad")
                 }
 
+                // Fix K1: the pad goes back as it came out, slowly at first; it does not vanish.
+                let reachOut = entry.padOnScreen.reach
+                hold(far, for: 0.05)
+                await pause(0.07)
+                let early = entry.padOnScreen.reach
+                await pause(0.3)
+                check(entry.phase == .idle && entry.padOnScreen.reach < 1, "the cursor leaves and the pad goes back")
+                check(early > reachOut * 0.5,
+                      "a third of the way in time the pad is still mostly out (\(Int(early)) of \(Int(reachOut)) pt)")
+                // With "Reduce motion" it fades where it is, 150 ms.
+                tuning.forcedReduceMotion = true
+                hold(spot, for: 0.7)
+                await pause(0.4)
+                check(entry.phase == .open && entry.padOnScreen.opacity > 0.99, "with Reduce motion the pad is out")
+                hold(far, for: 0.05)
+                await pause(0.07)
+                let fading = entry.padOnScreen
+                await pause(0.3)
+                check(fading.opacity > 0.1 && fading.opacity < 0.9 && fading.reach > reachOut - 1,
+                      "with Reduce motion it fades in place (opacity \(fading.opacity), \(Int(fading.reach)) pt)")
+                check(entry.padOnScreen.opacity < 0.01, "and is gone once faded")
+                tuning.forcedReduceMotion = nil
+
                 let stickersBefore = stickers.controllers.count
                 entry.openDraft(from: .pad)
                 await pause(0.5)
@@ -914,6 +937,23 @@ enum SelfCheck {
                 check(setup.isShown, "the window «Voice → tasks» opens")
                 snapshotView(setup.snapshotView, name: "18g-model-setup")
                 setup.snapshotView.window?.close()
+            }
+
+            // 17e. Fix K2: every window of the app opens on the desktop the user is on,
+            // over a full-screen app too, the way Tuning always did.
+            environment.showSettings()
+            environment.showTuningPanel()
+            environment.showModelSetup()
+            await pause(0.5)
+            for (name, window) in environment.appWindows {
+                guard let window else {
+                    check(false, "the window «\(name)» opens")
+                    continue
+                }
+                let follows = window.collectionBehavior.isSuperset(of: WindowPresenter.behavior)
+                check(window.isVisible && window.isOnActiveSpace && follows,
+                      "the window «\(name)» opens on the active desktop and may stand over a full-screen app")
+                window.close()
             }
 
             // 18. Dictation into a sticker (spec 18.4): the microphone on the glue strip

@@ -317,8 +317,8 @@ final class EntryController: NSObject {
         guard let layout, !isSuppressed || newPhase == .idle else { return }
         let window = padWindowFrame(layout)
         let target = padOrigin(reach: reach(for: newPhase), in: window, side: layout.edge.side)
-        // With "Reduce motion" the pad neither travels nor turns: it is simply
-        // there, and only its shadow and the oval fade (spec 6.7).
+        // With "Reduce motion" the pad neither travels nor turns: it fades in and
+        // out where it stands, with its shadow and the oval (spec 6.7, fix K1).
         let reduceMotion = tuning.reduceMotion
         let peekTilt = CGFloat(tuning.padPeekRotation) * (layout.edge.side == .right ? 1 : -1)
         let tilt: CGFloat = newPhase == .peek && !reduceMotion ? peekTilt : 0
@@ -340,24 +340,43 @@ final class EntryController: NSObject {
         // The pad, its shadow and the oval move as layers on the render server, at
         // the display's own rate; the window stays where it is (spec 6.7 `drawer`, fix H5).
         let isOut = newPhase != .idle
+        // Going back, the pad and the oval play the way out backwards (fix K1).
+        let curve: MotionCurve = !isOut && tuning.padHideCurveReversed ? MotionCurve.drawer.reversed : .drawer
+        let fade = animated && reduceMotion ? tuning.scaled(tuning.padReduceMotionFade) : 0
+        let time = reduceMotion ? fade : duration
         CATransaction.begin()
-        if duration > 0 {
+        if time > 0 {
             CATransaction.setCompletionBlock { [weak self] in
                 MainActor.assumeIsolated {
-                    self?.finishShowing(newPhase)
+                    self?.finishShowing(newPhase, target: target)
                 }
             }
         }
-        padContainer.slide(to: target, rotation: tilt, duration: reduceMotion ? 0 : duration, curve: .drawer)
-        padShadow.setOpacity(isOut ? Float(tuning.padShadowOpacity) : 0, duration: duration, curve: .drawer)
-        glowView.fade(to: isOut ? 1 : 0, duration: duration, curve: .drawer)
+        if reduceMotion {
+            // Out: in place at once, then visible. Back: it fades where it is and
+            // is put away when it has faded (`finishShowing`).
+            if isOut || fade <= 0 {
+                padContainer.slide(to: target, rotation: 0, duration: 0, curve: curve)
+            }
+            padContainer.fade(to: isOut || fade <= 0 ? 1 : 0, duration: fade, curve: .ease)
+        } else {
+            padContainer.fade(to: 1, duration: 0, curve: curve)
+            padContainer.slide(to: target, rotation: tilt, duration: duration, curve: curve)
+        }
+        padShadow.setOpacity(isOut ? Float(tuning.padShadowOpacity) : 0, duration: time, curve: reduceMotion ? .ease : curve)
+        glowView.fade(to: isOut ? 1 : 0, duration: time, curve: reduceMotion ? .ease : curve)
         CATransaction.commit()
-        if duration <= 0 { finishShowing(newPhase) }
+        if time <= 0 { finishShowing(newPhase, target: target) }
     }
 
-    private func finishShowing(_ shown: EdgeIntentDetector.Phase) {
+    private func finishShowing(_ shown: EdgeIntentDetector.Phase, target: CGPoint) {
         // The pad may have been called again while it was hiding.
         guard shown == .idle, phase == .idle else { return }
+        if padContainer.alphaValue < 1 {
+            // Faded out with "Reduce motion": put away, ready to fade in next time.
+            padContainer.slide(to: target, rotation: 0, duration: 0, curve: .drawer)
+            padContainer.alphaValue = 0
+        }
         if preferences.showsEdgeTab, !isSuppressed, layout != nil {
             tabPanel.orderFrontRegardless()
         }
@@ -681,6 +700,18 @@ final class EntryController: NSObject {
     #if DEBUG
     /// For the self-check's snapshots.
     var padSnapshotView: NSView { padView }
+    /// Where the pad is drawn right now, in the middle of a move: how much of it
+    /// is out of the screen edge, and its opacity (fix K1).
+    var padOnScreen: (reach: CGFloat, opacity: Float) {
+        guard let layout, let layer = padContainer.layer else { return (0, 0) }
+        let shown = layer.presentation() ?? layer
+        let window = padWindowFrame(layout)
+        let size = CGFloat(tuning.padSize)
+        let minX = shown.position.x - shown.anchorPoint.x * size
+        let reach = layout.edge.side == .right ? window.width - minX : minX + size
+        return (min(max(reach, 0), size), shown.opacity)
+    }
+
     var padWindowFrameForSnapshot: CGRect { padPanel.frame }
     #endif
 

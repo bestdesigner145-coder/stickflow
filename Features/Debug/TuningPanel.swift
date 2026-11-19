@@ -45,9 +45,10 @@ final class TuningPanelController {
             newWindow.center()
             window = newWindow
         }
-        NSApp.activate()
-        window?.makeKeyAndOrderFront(nil)
+        if let window { WindowPresenter.present(window) }
     }
+
+    var shownWindow: NSWindow? { window }
 }
 
 struct TuningPanelView: View {
@@ -232,6 +233,8 @@ struct TuningPanelView: View {
                       isOn: $tuning.rulesAssumeAfternoon, onChange: onTuningChange)
             ToggleRow(title: "⌘Z restores a peeled sticker while the toast is up",
                       isOn: $tuning.undoPeelUsesCommandZ, onChange: onTuningChange)
+            ToggleRow(title: "Pad goes back on the reversed drawer curve",
+                      isOn: $tuning.padHideCurveReversed, onChange: onTuningChange)
         } header: {
             Text(verbatim: "Behaviour variants (rule 0.3)")
         }
@@ -253,6 +256,9 @@ struct TuningPanelView: View {
             SliderRow(title: "Appear start scale", value: $tuning.appearStartScale, range: 0.8...1,
                       onChange: onTuningChange)
             SliderRow(title: "Peel, s", value: $tuning.peelDuration, range: 0...0.6, onChange: onTuningChange)
+            SliderRow(title: "Pad back, s", value: $tuning.padHideDuration, range: 0...0.6, onChange: onTuningChange)
+            SliderRow(title: "Pad fade with Reduce motion, s", value: $tuning.padReduceMotionFade, range: 0...0.6,
+                      onChange: onTuningChange)
             SliderRow(title: "Peel end scale", value: $tuning.peelEndScale, range: 0.1...1, onChange: onTuningChange)
             SliderRow(title: "Theme change, s", value: $tuning.themeTransitionDuration, range: 0...0.6,
                       onChange: onTuningChange)

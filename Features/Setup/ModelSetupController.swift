@@ -33,9 +33,7 @@ final class ModelSetupController: NSObject {
         let window = self.window ?? makeWindow()
         self.window = window
         window.setContentSize(NSSize(width: ModelSetupView.width, height: view.preferredHeight))
-        window.center()
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate()
+        WindowPresenter.present(window, centred: true)
     }
 
     private func refresh() {

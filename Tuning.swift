@@ -110,7 +110,13 @@ final class Tuning {
     var padPeekRotation: Double = -6
     var padPeekDuration: Double = 0.18
     var padOpenDuration: Double = 0.22
-    var padHideDuration: Double = 0.16
+    var padHideDuration: Double = 0.18
+    /// Fix K1: the pad goes back the way it came out, the `drawer` curve played
+    /// backwards (slow start, fast end). Played forwards, the curve covers most
+    /// of the way in its first frames, and the pad seems to vanish at once.
+    var padHideCurveReversed = true
+    /// "Reduce motion": the pad does not travel, it fades in and out (spec 6.7, fix K1).
+    var padReduceMotionFade: Double = 0.15
     /// The pad's shadow: wide and faint (fix H5).
     var padShadowRadius: Double = 20
     var padShadowOpacity: Double = 0.2
@@ -280,4 +286,9 @@ struct MotionCurve: Sendable {
     static let drawer = MotionCurve(c1x: 0.32, c1y: 0.72, c2x: 0, c2y: 1)
     /// Colour, texture, highlight.
     static let ease = MotionCurve(c1x: 0.25, c1y: 0.1, c2x: 0.25, c2y: 1)
+
+    /// The same curve played backwards in time: what came out with it goes back with this.
+    var reversed: MotionCurve {
+        MotionCurve(c1x: 1 - c2x, c1y: 1 - c2y, c2x: 1 - c1x, c2y: 1 - c1y)
+    }
 }
