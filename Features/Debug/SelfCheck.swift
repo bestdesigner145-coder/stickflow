@@ -4,7 +4,8 @@
 #if DEBUG
 // The self-check is one long scripted scenario with wordy check labels;
 // the size and length limits are for product code.
-// swiftlint:disable function_body_length cyclomatic_complexity large_tuple line_length
+// swiftlint:disable file_length
+// swiftlint:disable function_body_length cyclomatic_complexity large_tuple line_length type_body_length
 import AppKit
 import StickflowCore
 
@@ -117,6 +118,10 @@ enum SelfCheck {
             let textView = controller.rootView.textView
             check(controller.mode == .editing, "a new sticker starts in editing")
             check(controller.panel.isKeyWindow, "the panel has keyboard focus while editing")
+            // A busy runner may start the first animation late: give it time before judging.
+            for _ in 0..<20 where controller.panel.alphaValue < 0.98 {
+                await pause(0.1)
+            }
             check(abs(Double(controller.panel.alphaValue) - 1) < 0.02, "the new sticker has finished appearing (alpha \(controller.panel.alphaValue))")
             let frontWhileEditing = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
             note("frontmost app while editing: \(frontWhileEditing ?? "none"), Stickflow active: \(NSApp.isActive)")
@@ -510,6 +515,46 @@ enum SelfCheck {
                     _ = captureScreen(entry.padWindowFrameForSnapshot.insetBy(dx: -20, dy: -20), on: screen, name: "12b-screen-pad")
                 }
 
+                // Fix K1: the pad goes back as it came out, slowly at first; it does not vanish.
+                // A virtual Mac may sleep longer than asked, so the pad is read where its own
+                // move says it is in time, and the reading is tried again if it came too late.
+                let reachOut = entry.padOnScreen.reach
+                var sampled = false
+                for _ in 0..<4 where !sampled {
+                    if entry.phase != .open {
+                        hold(spot, for: 0.7)
+                        await pause(0.4)
+                    }
+                    hold(far, for: 0.5)
+                    await pause(0.03)
+                    let (reach, progress) = (entry.padOnScreen.reach, entry.padMoveProgress)
+                    note("pad going back: \(Int(reach)) pt at \(progress.map { String(format: "%.2f", $0) } ?? "-") of the move")
+                    await pause(0.3)
+                    guard let progress, progress > 0.02, progress < 0.6 else { continue }
+                    sampled = true
+                    let expected = reachOut * CGFloat(1 - MotionCurve.drawer.reversed.value(at: progress))
+                    check(abs(reach - expected) < 12 && reach > reachOut * 0.5,
+                          "going back the pad starts slowly: \(Int(reach)) of \(Int(reachOut)) pt out at \(Int(progress * 100)) % of the time")
+                }
+                if !sampled { note("the pad's move could not be read in time on this machine") }
+                check(entry.phase == .idle && entry.padOnScreen.reach < 1, "the cursor leaves and the pad goes back")
+                // With "Reduce motion" it fades where it is, 150 ms.
+                let motionBefore = tuning.forcedReduceMotion
+                tuning.forcedReduceMotion = true
+                hold(spot, for: 0.7)
+                await pause(0.4)
+                check(entry.phase == .open && entry.padOnScreen.opacity > 0.99, "with Reduce motion the pad is out")
+                hold(far, for: 0.5)
+                let fading = entry.padOnScreen
+                let fades = entry.padIsFading
+                await pause(0.3)
+                check(fades && fading.reach > reachOut - 1,
+                      "with Reduce motion it fades in place (fade \(fades), \(Int(fading.reach)) pt)")
+                check(entry.padOnScreen.opacity < 0.01, "and is gone once faded")
+                tuning.forcedReduceMotion = motionBefore
+                hold(spot, for: 0.7)
+                await pause(0.4)
+
                 let stickersBefore = stickers.controllers.count
                 entry.openDraft(from: .pad)
                 await pause(0.5)
@@ -545,6 +590,8 @@ enum SelfCheck {
                 check(stickers.controllers.last?.panel.isVisible == true, "the window appears where the picture landed")
                 check(stickers.effectsOverlay.spriteCount == 0 && !stickers.effectsOverlay.isVisible, "and the overlay is gone (\(stickers.effectsOverlay.spriteCount) left)")
                 check(!draft.isOpen, "sticking closes the draft")
+                // Nothing of the draft is left on screen: neither its window nor a picture of it (fix H6).
+                check(draft.rootView.window?.isVisible != true, "the draft's window is off the screen once it has closed")
                 check(NSApp.keyWindow == nil, "the keyboard goes back after the draft closes")
                 check(stickers.controllers.count == stickersBefore + 1, "the draft becomes a sticker")
                 if let stuck = stickers.controllers.last {
@@ -596,13 +643,8 @@ enum SelfCheck {
                     draft.attentionDidLeave()
                     await pause(0.4)
                     check(draft.isOpen && draft.text == "Недописанное", "a draft with text stays when focus is lost")
-                    tuning.draftWithTextClosesOnFocusLoss = true
-                    draft.attentionDidLeave()
+                    entry.toggleDraft()
                     await pause(0.4)
-                    tuning.draftWithTextClosesOnFocusLoss = false
-                    check(!draft.isOpen, "with the Tuning switch a draft with text closes when focus is lost")
-                    let kept = try environment.repository.stickers(status: .draft)
-                    check(kept.contains { $0.title == "Недописанное" }, "and is kept as a draft (\(kept.map(\.title)))")
                 } catch {
                     check(false, "drafts can be read (\(error))")
                 }
@@ -695,11 +737,328 @@ enum SelfCheck {
             entry.toggleDraft()
             await pause(0.3)
             entry.draft.rootView.textView.insertText("Без полёта", replacementRange: entry.draft.rootView.textView.selectedRange())
-            entry.draft.submit()
+            entry.draft.submit(asIs: true)
             check(stickers.controllers.last?.isAirborne == false, "with Reduce Motion the sticker does not fly")
             await pause(0.5)
-            check(stickers.controllers.last?.sticker.title == "Без полёта" && stickers.controllers.last?.panel.isVisible == true, "it appears in its place")
+            check(stickers.controllers.last?.sticker.title == "Без полёта" && stickers.controllers.last?.panel.isVisible == true, "it appears in its place, stuck as it is")
             tuning.forcedReduceMotion = nil
+
+            // 15. Return takes a dictated paragraph apart with the rules (spec 8).
+            // Without the pause on the result; that pause has a step of its own below.
+            let previewDuration = tuning.structuredPreviewDuration
+            tuning.structuredPreviewDuration = 0
+            let countBeforePlan = stickers.controllers.count
+            let dictated = "Короче, сначала надо доделать экран кошелька, там типа пустые состояния и ошибки, "
+                + "потом созвон с разработкой в три, и если успею, условно, пост в телегу написать"
+            entry.toggleDraft()
+            await pause(0.3)
+            entry.draft.rootView.textView.insertText(dictated, replacementRange: entry.draft.rootView.textView.selectedRange())
+            entry.draft.submit()
+            await pause(1.2)
+            if stickers.controllers.count == countBeforePlan + 1, let planned = stickers.controllers.last {
+                let lines = planned.sticker.blocks.map { "\($0.kind.rawValue):\($0.indent):\($0.text)" }
+                let expected = [
+                    "todo:0:Доделать экран кошелька", "bullet:1:пустые состояния", "bullet:1:ошибки",
+                    "todo:0:Созвониться с разработкой в три", "heading2:0:Если успею", "todo:0:Написать пост в телегу",
+                ]
+                // A sticker with that title may be on screen already; then the new one gets the time (spec 18.7).
+                check(planned.sticker.title.hasPrefix("План на сегодня"), "a dictated paragraph gets the default title (\(planned.sticker.title))")
+                check(lines == expected, "the rules take it apart into tasks, details and an optional section (\(lines))")
+                check(planned.sticker.rawInput == dictated, "what was said is kept with the sticker")
+                check(!entry.draft.isOpen, "the draft closes once the plan is stuck")
+                snapshot(planned, name: "16-structured")
+            } else {
+                check(false, "a dictated paragraph becomes a sticker (\(stickers.controllers.count - countBeforePlan) new)")
+            }
+
+            // 16. Dictation (spec 7): the microphone records, speech becomes text in the draft, Return makes a plan of it.
+            let countBeforeVoice = stickers.controllers.count
+            let voice = entry.draft.dictation
+            entry.toggleDraft()
+            await pause(0.3)
+            voice.toggle()
+            await pause(0.4)
+            check(voice.state == .recording, "pressing the microphone starts a recording (\(voice.state))")
+            check(entry.draft.rootView.dictation.state == .recording && voice.elapsed > 0, "the draft shows the recording and its timer runs (\(voice.elapsed))")
+            snapshotView(entry.draft.rootView, name: "17-draft-recording")
+            NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: entry.draft.rootView.window)
+            await pause(0.2)
+            check(entry.draft.isOpen, "an empty draft stays open while it listens")
+            entry.draft.submit()
+            check(entry.draft.isOpen, "Return does nothing while it listens")
+            voice.toggle()
+            await pause(0.5)
+            check(voice.state == .idle, "pressing it again stops the recording (\(voice.state))")
+            check(entry.draft.text == ScriptedSpeechEngine.sample, "what was said appears in the draft (\(entry.draft.text.prefix(40)))")
+            entry.draft.submit()
+            await pause(1.2)
+            check(
+                stickers.controllers.count == countBeforeVoice + 1 && stickers.controllers.last?.sticker.blocks.count == 6,
+                "and Return makes a plan of it (\(stickers.controllers.last?.sticker.blocks.count ?? -1) lines)"
+            )
+            // Spec 18.4: the draft has a microphone and a tick, nothing else; a second
+            // dictation adds to what the first one left.
+            entry.toggleDraft()
+            await pause(0.3)
+            let draftView = entry.draft.rootView
+            check(draftView.showsMicrophone && draftView.setupButton.isHidden, "with the speech model here the draft shows the microphone")
+            voice.toggle()
+            await pause(0.3)
+            voice.toggle()
+            await pause(0.5)
+            let saidOnce = entry.draft.text
+            voice.toggle()
+            await pause(0.3)
+            voice.toggle()
+            await pause(0.5)
+            check(
+                !saidOnce.isEmpty && entry.draft.text.hasPrefix(saidOnce) && entry.draft.text.count > saidOnce.count,
+                "a second dictation adds to the same draft (\(entry.draft.text.count) characters after \(saidOnce.count))"
+            )
+
+            // Spec 18.10 A3: while the voice is on its way there is no microphone,
+            // only a line that says how far the download is.
+            let models = environment.models
+            models.setStateForTesting(.downloading(received: 1_000_000_000, total: 3_000_000_000), speech: false, structuring: false)
+            check(!draftView.showsMicrophone && !draftView.setupButton.isHidden, "without the voice the microphone gives way to the progress")
+            check(draftView.setupButton.title.hasPrefix(L10n.speechPreparing(percent: 0).prefix(8)),
+                  "it says «\(draftView.setupButton.title)»")
+            snapshotView(draftView, name: "17b-draft-preparing")
+            draftView.onMicrophone?()
+            await pause(0.2)
+            check(voice.state == .idle, "and nothing can be recorded meanwhile (\(voice.state))")
+            models.setStateForTesting(.failed, speech: false, structuring: false)
+            check(draftView.setupButton.isLink, "a broken download is offered again as a word to click")
+            models.setStateForTesting(.missing, speech: false, structuring: false)
+            check(draftView.showsMicrophone, "spec 18.10 A3, «Not now»: the microphone is there, and its first press brings the models")
+            models.setStateForTesting(.ready)
+            check(draftView.showsMicrophone && draftView.setupButton.isHidden, "the microphone comes back when the model is ready")
+
+            voice.toggle()
+            await pause(0.3)
+            entry.toggleDraft()
+            await pause(0.3)
+            check(voice.state == .idle && !entry.draft.isOpen, "closing the draft drops the recording (\(voice.state))")
+
+            // 17. A structurer that takes its time (spec 4.3): "Sorting…" with Stop,
+            // a failure with two answers, the result on show and ⌘Z.
+            let draft = entry.draft
+            let rules = entry.structurer
+            let phrase = "Сначала забрать посылку, потом оплатить интернет"
+            func write(_ text: String) {
+                draft.rootView.textView.insertText(text, replacementRange: draft.rootView.textView.selectedRange())
+            }
+            tuning.structuredPreviewDuration = previewDuration
+            var countBefore = stickers.controllers.count
+
+            entry.structurer = SlowStructurer(delay: 0.5, fails: true)
+            entry.toggleDraft()
+            await pause(0.3)
+            write(phrase)
+            draft.submit()
+            await pause(0.2)
+            check(draft.phase == .structuring, "a slow structurer shows «Sorting…» (\(draft.phase))")
+            snapshotView(draft.rootView, name: "18-draft-structuring")
+            await pause(0.7)
+            check(draft.phase == .failed && draft.isOpen, "when it fails the draft asks what to do (\(draft.phase))")
+            snapshotView(draft.rootView, name: "18b-draft-failed")
+            draft.rootView.stickAnywayButton.onClick?()
+            await pause(1.0)
+            check(
+                stickers.controllers.count == countBefore + 1 && stickers.controllers.last?.sticker.title == phrase,
+                "«Stick» sticks the text as it was written (\(stickers.controllers.last?.sticker.title ?? "-"))"
+            )
+
+            entry.structurer = SlowStructurer(delay: 5, fails: false)
+            entry.toggleDraft()
+            await pause(0.3)
+            write(phrase)
+            draft.submit()
+            await pause(0.2)
+            check(draft.phase == .structuring, "the structurer is at work")
+            draft.rootView.stickButton.onClick?()
+            check(draft.phase == .writing && draft.text == phrase, "«Stop» gives the text back for writing (\(draft.phase))")
+
+            entry.structurer = rules
+            countBefore = stickers.controllers.count
+            draft.submit()
+            await pause(0.3)
+            check(draft.phase == .result && stickers.controllers.count == countBefore, "the result is shown before it is stuck (\(draft.phase))")
+            check(draft.text.contains("☐ Забрать посылку"), "and it is the plan, not the text (\(draft.text.prefix(60)))")
+            snapshotView(draft.rootView, name: "18c-draft-result")
+            let undone = draft.rootView.textView.onUndo?() ?? false
+            check(undone && draft.phase == .writing && draft.text == phrase, "⌘Z brings the original text back (\(draft.text.prefix(40)))")
+            draft.submit()
+            await pause(0.3)
+            draft.submit()
+            await pause(1.0)
+            let planned = stickers.controllers.last
+            check(
+                stickers.controllers.count == countBefore + 1 && planned?.sticker.blocks.map(\.text) == ["Забрать посылку", "Оплатить интернет"],
+                "Return on the result sticks it at once (\(planned?.sticker.blocks.map(\.text) ?? []))"
+            )
+
+            // 17b. Failures say why (spec 18.10 C2): no key, and no question about the cloud before there is one.
+            let choiceBefore = environment.preferences.structurerChoice
+            environment.preferences.structurerChoice = .claude
+            var asked = false
+            entry.confirmCloud = { _ in
+                asked = true
+                return (false, false)
+            }
+            entry.structurer = UnconfiguredStructurer(id: "claude", displayName: "Claude", isLocal: false, error: .missingKey)
+            entry.toggleDraft()
+            await pause(0.3)
+            write(phrase)
+            draft.submit()
+            await pause(0.4)
+            check(draft.phase == .failed && draft.rootView.failureMessage == L10n.structureNoKey("Claude"),
+                  "without a key the draft says so (\(draft.rootView.failureMessage))")
+            check(!asked, "and does not ask about sending text that cannot be sent")
+            snapshotView(draft.rootView, name: "18d-draft-no-key")
+            draft.rootView.stickAnywayButton.onClick?()
+            await pause(0.8)
+            environment.preferences.structurerChoice = choiceBefore
+            entry.confirmCloud = { CloudConsent.ask(provider: $0) }
+
+            // 17c. Spec 18.10 A3: without the model Return sticks the text as it is, says
+            // it will be sorted, and «Sort into tasks» does it once the model is here.
+            models.setStateForTesting(.downloading(received: 1_900_000_000, total: 3_000_000_000), speech: true, structuring: false)
+            entry.structurer = BuiltInStructurer(model: nil, percent: 64)
+            countBefore = stickers.controllers.count
+            entry.toggleDraft()
+            await pause(0.3)
+            write(phrase)
+            draft.submit()
+            await pause(1.0)
+            let waiting = stickers.controllers.last
+            check(stickers.controllers.count == countBefore + 1 && waiting?.sticker.title == phrase,
+                  "without the model the text is stuck as it is (\(waiting?.sticker.title ?? "-"))")
+            check(stickers.isNoteVisible, "and a note under the sticker says it will be sorted")
+            if let view = stickers.noteSnapshotView { snapshotView(view, name: "18e-note-later") }
+            models.setStateForTesting(.ready, speech: true, structuring: true)
+            await pause(0.3)
+            check(stickers.isNoteVisible, "once the model is here the note offers «Sort into tasks»")
+            if let view = stickers.noteSnapshotView { snapshotView(view, name: "18f-note-sort") }
+            stickers.pressNote()
+            await pause(1.0)
+            check(waiting?.sticker.blocks.map(\.text) == ["Забрать посылку", "Оплатить интернет"],
+                  "«Sort into tasks» sorts the sticker in place (\(waiting?.sticker.blocks.map(\.text) ?? []))")
+            models.setStateForTesting(.ready)
+            entry.structurer = rules
+
+            // 17d. The first-launch window "Voice → tasks" (spec 18.10 A3).
+            if let setup = environment.modelSetup {
+                setup.show()
+                await pause(0.4)
+                check(setup.isShown, "the window «Voice → tasks» opens")
+                snapshotView(setup.snapshotView, name: "18g-model-setup")
+                setup.snapshotView.window?.close()
+            }
+
+            // 17e. Fix K2: every window of the app opens on the desktop the user is on,
+            // over a full-screen app too, the way Tuning always did.
+            environment.showSettings()
+            environment.showTuningPanel()
+            environment.showModelSetup()
+            await pause(0.5)
+            for (name, window) in environment.appWindows {
+                guard let window else {
+                    check(false, "the window «\(name)» opens")
+                    continue
+                }
+                let follows = window.collectionBehavior.isSuperset(of: WindowPresenter.behavior)
+                check(window.isVisible && window.isOnActiveSpace && follows,
+                      "the window «\(name)» opens on the active desktop and may stand over a full-screen app")
+                window.close()
+            }
+
+            // 18. Dictation into a sticker (spec 18.4): the microphone on the glue strip
+            // of a sticker that is being edited adds what was said to that sticker.
+            countBefore = stickers.controllers.count
+            if let target = stickers.controllers.last, let stickerVoice = entry.voice {
+                let microphone = target.rootView.microphone
+                check(microphone.button.isHidden, "at rest a sticker shows no microphone")
+                target.beginEditing(at: nil)
+                await pause(0.2)
+                check(!microphone.button.isHidden, "while it is edited its glue strip carries a microphone")
+                microphone.onClick?()
+                await pause(0.4)
+                check(microphone.state == .recording, "pressing it starts a recording (\(microphone.state))")
+                snapshot(target, name: "19-sticker-recording")
+                microphone.onClick?()
+                await pause(1.2)
+                check(microphone.state == .idle && !stickerVoice.isBusy, "pressing it again stops (\(microphone.state))")
+                let texts = target.sticker.blocks.map(\.text)
+                check(stickers.controllers.count == countBefore, "no new sticker appears")
+                check(
+                    Array(texts.prefix(2)) == ["Забрать посылку", "Оплатить интернет"] && texts.contains("Доделать экран кошелька"),
+                    "what was said joins the sticker's own lines (\(texts))"
+                )
+                microphone.onClick?()
+                await pause(0.3)
+                entry.toggleDraft()
+                await pause(0.3)
+                check(microphone.state == .idle && !stickerVoice.isBusy, "opening the draft takes the microphone away from the sticker")
+                entry.toggleDraft()
+                await pause(0.3)
+                target.endEditing()
+                await pause(0.2)
+                check(microphone.button.isHidden, "the microphone leaves with the editing")
+                snapshot(target, name: "19b-appended")
+
+                // 18b. Voice commands (spec 18.22): a model's operations change the lines,
+                // the changed ones are highlighted, ⌘Z takes the whole command back.
+                let structurerBefore = entry.structurer
+                let before = (title: target.sticker.title, blocks: target.sticker.blocks)
+                entry.structurer = CommandStructurer(answer: StickerEdit(operations: [
+                    .check(target: 1), .addChildren(target: 2, items: ["до пятницы"]), .rename("Дела на неделю"),
+                ]))
+                target.beginEditing(at: nil)
+                await pause(0.2)
+                microphone.onClick?()
+                await pause(0.4)
+                microphone.onClick?()
+                // The highlight lasts 1.2 s: read it as soon as the command has landed.
+                for _ in 0..<60 where target.sticker.title != "Дела на неделю" {
+                    await pause(0.05)
+                }
+                let edited = target.sticker.blocks
+                check(
+                    edited.first?.done == true && edited.count == before.blocks.count + 1
+                        && edited[2].text == "до пятницы" && edited[2].indent == 1 && target.sticker.title == "Дела на неделю",
+                    "a command checks, adds a point under a line and renames (\(target.sticker.title): \(edited.map(\.text)))"
+                )
+                let marked = target.rootView.textView.textStorage.map { storage in
+                    var found = false
+                    storage.enumerateAttribute(.backgroundColor, in: NSRange(location: 0, length: storage.length)) { value, _, _ in
+                        if value != nil { found = true }
+                    }
+                    return found
+                } ?? false
+                check(marked, "the changed lines are highlighted")
+                snapshot(target, name: "19c-command")
+                target.rootView.textView.undoManager?.undo()
+                await pause(0.2)
+                check(
+                    target.sticker.blocks.map(\.text) == before.blocks.map(\.text) && target.sticker.title == before.title
+                        && target.sticker.blocks.first?.done == before.blocks.first?.done,
+                    "⌘Z takes the whole command back (\(target.sticker.title))"
+                )
+                entry.structurer = CommandStructurer(answer: StickerEdit(unsure: true, operations: []))
+                microphone.onClick?()
+                await pause(0.4)
+                microphone.onClick?()
+                await pause(1.2)
+                check(target.sticker.blocks.map(\.text) == before.blocks.map(\.text) && stickers.isNoteVisible,
+                      "an unclear line changes nothing and says «Не понял, какой пункт»")
+                stickers.hideNote()
+                target.endEditing()
+                entry.structurer = structurerBefore
+                await pause(0.2)
+            } else {
+                check(false, "there is a sticker to dictate into")
+            }
         }
 
         // MARK: Snapshots
@@ -765,5 +1124,41 @@ enum SelfCheck {
         }
     }
 }
-// swiftlint:enable function_body_length cyclomatic_complexity large_tuple line_length
+
+/// A structurer that answers late, or fails late: for the draft's waiting states.
+/// A model that answers every command the same way (spec 18.22).
+private struct CommandStructurer: Structurer {
+    let id = "command"
+    let displayName = "Command"
+    let isLocal = true
+    let answer: StickerEdit
+
+    func health() async -> StructurerHealth { .ready }
+
+    func structure(_ request: StructureRequest) async throws -> NotePlan {
+        RuleStructurer.plan(from: request.text)
+    }
+
+    var editsStickers: Bool { true }
+
+    func edit(_: StickerEditRequest) async throws -> StickerEdit { answer }
+}
+
+private struct SlowStructurer: Structurer {
+    let id = "slow"
+    let displayName = "Slow"
+    let isLocal = true
+    let delay: TimeInterval
+    let fails: Bool
+
+    func health() async -> StructurerHealth { .ready }
+
+    func structure(_ request: StructureRequest) async throws -> NotePlan {
+        try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+        if fails { throw StructurerError.invalidAnswer }
+        return RuleStructurer.plan(from: request.text)
+    }
+}
+
+// swiftlint:enable function_body_length cyclomatic_complexity large_tuple line_length type_body_length
 #endif

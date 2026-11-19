@@ -197,14 +197,87 @@ final class PadView: NSView {
     }
 }
 
-/// The soft grey oval behind the pad (reference 02).
+/// The soft oval behind the pad (reference 02). It thins out to nothing well
+/// before its border, so that no edge can be seen (fix H5).
 final class PadGlowView: NSView {
+    /// Opacity in the middle.
+    var strength: CGFloat = 0.1 {
+        didSet {
+            if strength != oldValue { needsDisplay = true }
+        }
+    }
+
+    private static let steps = 8
+
     override func draw(_ dirtyRect: NSRect) {
-        let dark = effectiveAppearance.isDark
-        let center = NSColor(white: dark ? 1 : 0, alpha: dark ? 0.16 : 0.14)
-        guard let gradient = NSGradient(starting: center, ending: center.withAlphaComponent(0)) else { return }
-        let oval = NSBezierPath(ovalIn: bounds)
-        gradient.draw(in: oval, relativeCenterPosition: .zero)
+        guard let context = NSGraphicsContext.current?.cgContext, bounds.width > 0, bounds.height > 0 else { return }
+        let white: CGFloat = effectiveAppearance.isDark ? 1 : 0
+        var colors: [CGColor] = []
+        var locations: [CGFloat] = []
+        for step in 0...Self.steps {
+            let distance = CGFloat(step) / CGFloat(Self.steps)
+            // Falls off quickly at first and leaves a long quiet tail.
+            colors.append(CGColor(gray: white, alpha: strength * (1 - distance) * (1 - distance)))
+            locations.append(distance)
+        }
+        guard let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceGray(), colors: colors as CFArray, locations: locations) else {
+            return
+        }
+        context.saveGState()
+        // A circle of radius one, stretched into the oval.
+        context.translateBy(x: bounds.midX, y: bounds.midY)
+        context.scaleBy(x: bounds.width / 2, y: bounds.height / 2)
+        context.drawRadialGradient(gradient, startCenter: .zero, startRadius: 0, endCenter: .zero, endRadius: 1, options: [])
+        context.restoreGState()
+    }
+}
+
+/// The pad's shadow: wide, blurred and faint (fix H5). Layer-hosting, so that
+/// AppKit leaves the layer's shadow alone; the path spares the render server
+/// from working the shape out of the pixels.
+final class PadShadowView: NSView {
+    private let host = CALayer()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        layer = host
+        wantsLayer = true
+        host.shadowColor = NSColor.black.cgColor
+        host.shadowOpacity = 0
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    func configure(radius: CGFloat, offsetY: CGFloat) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        host.shadowRadius = radius
+        host.shadowOffset = CGSize(width: 0, height: -offsetY)
+        host.shadowPath = CGPath(roundedRect: bounds.insetBy(dx: 4, dy: 4), cornerWidth: 3, cornerHeight: 3, transform: nil)
+        CATransaction.commit()
+    }
+
+    /// Opacity of the shadow right now, for tests.
+    var opacity: Float { host.shadowOpacity }
+
+    func setOpacity(_ opacity: Float, duration: TimeInterval, curve: MotionCurve) {
+        let from = host.presentation()?.shadowOpacity ?? host.shadowOpacity
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        host.shadowOpacity = opacity
+        CATransaction.commit()
+        guard duration > 0 else {
+            host.removeAnimation(forKey: "shadow")
+            return
+        }
+        let animation = CABasicAnimation(keyPath: "shadowOpacity")
+        animation.fromValue = from
+        animation.duration = duration
+        animation.timingFunction = curve.timingFunction
+        host.add(animation, forKey: "shadow")
     }
 }
 

@@ -38,6 +38,8 @@ final class StickerManager: NSObject {
     private let pointer: PointerTracker
     private let hint = EditHintController()
     private let toast = ToastController()
+    /// Notes under one sticker: "I'll sort it once the model is here" (spec 18.10 A3).
+    private let note = ToastController()
     private lazy var focusReturn = FocusReturnPanel.make()
     let captureWatcher = ScreenCaptureWatcher()
 
@@ -186,6 +188,72 @@ final class StickerManager: NSObject {
         return controller
     }
 
+    /// A sticker has got its window; dictation hangs its microphone on it (spec 18.4).
+    var onControllerCreated: ((StickerController) -> Void)?
+
+    /// Adds a plan's lines to a sticker that is already there (spec 8.3).
+    /// - Returns: false when the sticker already said all of it.
+    @discardableResult
+    func append(_ plan: NotePlan, to controller: StickerController) -> Bool {
+        let merged = PlanAppender.append(plan, to: controller.sticker.blocks)
+        guard !merged.added.isEmpty else { return false }
+        showAll()
+        // Through the editor, as if the lines had been typed: the sticker's model,
+        // its counter and its size follow the usual way.
+        let editor = controller.rootView.textView
+        editor.load(EditorDocument(title: controller.sticker.title, blocks: merged.blocks))
+        controller.blockTextViewDidChangeContent(editor)
+        persist(controller)
+        return true
+    }
+
+    /// A voice command changed the sticker (spec 18.22): one step for ⌘Z, the
+    /// changed lines highlighted for a moment.
+    func applyEdit(_ result: StickerEdit.Result, to controller: StickerController) {
+        showAll()
+        let editor = controller.rootView.textView
+        editor.replace(with: EditorDocument(title: result.title, blocks: result.blocks), actionName: L10n.voiceCommand)
+        editor.highlight(
+            lines: result.changed, title: result.renamed, for: tuning.scaled(tuning.voiceEditHighlight),
+            color: NSColor.systemOrange.withAlphaComponent(0.28)
+        )
+        persist(controller)
+    }
+
+    /// The sticker's content becomes `plan`: "Sort into tasks" once the model is here (spec 18.10 A3).
+    func replace(_ plan: NotePlan, in controller: StickerController) {
+        let editor = controller.rootView.textView
+        editor.load(EditorDocument(title: plan.title, blocks: plan.blocks()))
+        controller.blockTextViewDidChangeContent(editor)
+        persist(controller)
+    }
+
+    /// A note under a sticker, with a button when there is something to do.
+    /// - Parameter lasts: seconds; `nil` — until the button is clicked.
+    func note(
+        _ message: String, action title: String = "", under controller: StickerController, lasts: TimeInterval? = -1,
+        perform: @escaping () -> Void = {}
+    ) {
+        guard let screen = displays.screen(containing: controller.paperFrame)
+            ?? displays.stickerScreen(preferredUUID: preferences.stickerDisplayUUID) else { return }
+        note.show(
+            message: message, actionTitle: title, on: screen, tuning: tuning,
+            below: controller.paperFrame, lasts: lasts, action: perform
+        )
+    }
+
+    func hideNote() {
+        note.hide()
+    }
+
+    #if DEBUG
+    var isNoteVisible: Bool { note.isVisible }
+    var noteSnapshotView: NSView? { note.snapshotView }
+    func pressNote() {
+        note.performAction()
+    }
+    #endif
+
     /// Keeps a draft that was closed without sticking (spec 4.3: Esc saves it to history).
     func keepDraft(_ plan: PlainTextPlan.Result, rawInput: String) {
         guard !plan.isEmpty else { return }
@@ -206,6 +274,7 @@ final class StickerManager: NSObject {
         let controller = StickerController(sticker: sticker, tuning: tuning, preferences: preferences, clock: clock)
         controller.manager = self
         controllers.append(controller)
+        onControllerCreated?(controller)
         return controller
     }
 

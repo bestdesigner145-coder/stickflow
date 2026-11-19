@@ -19,9 +19,10 @@ final class Tuning {
 
     var glueStripHeight: Double = 14
     var cornerZoneSize: Double = 28
-    var widthSmall: Double = 200
-    var widthMedium: Double = 232
-    var widthLarge: Double = 280
+    /// Spec 18.6: 260 / 320 / 400; a title of 2–4 words fits one line at M.
+    var widthSmall: Double = 260
+    var widthMedium: Double = 320
+    var widthLarge: Double = 400
     /// Tallest a sticker gets at rest; longer text fades out at the bottom.
     var maxPaperHeight: Double = 280
     var minPaperHeight: Double = 52
@@ -109,7 +110,21 @@ final class Tuning {
     var padPeekRotation: Double = -6
     var padPeekDuration: Double = 0.18
     var padOpenDuration: Double = 0.22
-    var padHideDuration: Double = 0.16
+    var padHideDuration: Double = 0.18
+    /// Fix K1: the pad goes back the way it came out, the `drawer` curve played
+    /// backwards (slow start, fast end). Played forwards, the curve covers most
+    /// of the way in its first frames, and the pad seems to vanish at once.
+    var padHideCurveReversed = true
+    /// "Reduce motion": the pad does not travel, it fades in and out (spec 6.7, fix K1).
+    var padReduceMotionFade: Double = 0.15
+    /// How long the lines a voice command changed stay highlighted (spec 18.22).
+    var voiceEditHighlight: Double = 1.2
+    /// The pad's shadow: wide and faint (fix H5).
+    var padShadowRadius: Double = 20
+    var padShadowOpacity: Double = 0.2
+    var padShadowOffset: Double = 6
+    /// Opacity in the middle of the oval behind the pad.
+    var padGlowOpacity: Double = 0.1
 
     // MARK: Draft (4.3)
 
@@ -200,10 +215,39 @@ final class Tuning {
     /// On: a cursor that flew into the zone is ignored until it leaves and comes
     /// back slowly. Off: it may stop in the zone and still call the pad.
     var zoneRejectsFastEntry = false
-    /// What a draft with text does when the keyboard goes elsewhere or the desktop
-    /// changes. Off: it stays on screen. On: it closes and is kept as a draft, the
-    /// way Esc does. An empty draft always closes.
-    var draftWithTextClosesOnFocusLoss = false
+
+    /// Rules (spec 8.1): read "в три" said without "утра" or "дня" as 15:00, the
+    /// way the spec's example does. Off (author, 15.11.2026): no guessing, such
+    /// an hour stays in the text as it was said.
+    var rulesAssumeAfternoon = false
+
+    // MARK: Structuring (spec 8, 4.3)
+
+    /// How long the draft shows the result, highlighted, before it is stuck.
+    var structuredPreviewDuration: Double = 1.2
+    /// The built-in model, the first time: it loads and reads its rules (spec 18.10).
+    var structureTimeoutBuiltIn: Double = 90
+    /// A structurer that takes longer has failed (spec 8.1).
+    var structureTimeoutLocal: Double = 20
+    var structureTimeoutCloud: Double = 15
+    /// One turn of the "Sorting…" spinner (spec 6.7).
+    var spinnerPeriod: Double = 0.8
+
+    // MARK: Dictation (spec 7)
+
+    /// The longest dictation, seconds; the timer turns red this long before the end.
+    var dictationLimit: Double = 180
+    var dictationWarning: Double = 15
+    /// How often the timer and the level meter are refreshed.
+    var dictationTick: Double = 0.05
+    /// One beat of the microphone's pulse while it records.
+    var dictationPulseDuration: Double = 0.6
+    /// The speech model (about half a gigabyte in memory) is let go this long
+    /// after the last dictation. Read once, at launch.
+    var speechModelIdleUnload: Double = 120
+    /// The built-in model leaves memory this long after its last answer (spec 18.10 A1).
+    var structuringModelIdleUnload: Double = 300
+
     /// On (spec 4.10): ⌘Z brings a peeled sticker back while its toast is up. The
     /// key is taken from the app in front for those few seconds, or until the next click.
     var undoPeelUsesCommandZ = true
@@ -244,4 +288,9 @@ struct MotionCurve: Sendable {
     static let drawer = MotionCurve(c1x: 0.32, c1y: 0.72, c2x: 0, c2y: 1)
     /// Colour, texture, highlight.
     static let ease = MotionCurve(c1x: 0.25, c1y: 0.1, c2x: 0.25, c2y: 1)
+
+    /// The same curve played backwards in time: what came out with it goes back with this.
+    var reversed: MotionCurve {
+        MotionCurve(c1x: 1 - c2x, c1y: 1 - c2y, c2x: 1 - c1x, c2y: 1 - c1y)
+    }
 }

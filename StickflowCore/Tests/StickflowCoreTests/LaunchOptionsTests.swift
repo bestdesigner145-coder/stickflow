@@ -33,6 +33,14 @@ final class LaunchOptionsTests: XCTestCase {
         XCTAssertNil(LaunchOptions(arguments: ["Stickflow", "--self-check"]).selfCheckDirectory)
     }
 
+    func testDemoTakesASoundFileAndAPlaceForTheModels() {
+        let options = LaunchOptions(arguments: ["Stickflow", "--demo", "/tmp/said.wav", "--models-root", "/tmp/models", "--cpu-only"])
+        XCTAssertEqual(options.demoAudio, "/tmp/said.wav")
+        XCTAssertTrue(options.isCPUOnly)
+        XCTAssertEqual(options.modelsRoot, "/tmp/models")
+        XCTAssertNil(LaunchOptions(arguments: ["Stickflow", "--demo"]).demoAudio, "a flag without its file is ignored")
+    }
+
     func testSeedsAreReproducible() {
         let now = Date(timeIntervalSince1970: 1_700_000_000)
         for fixture in SeedFixture.allCases {

@@ -146,6 +146,41 @@ final class BlockTextView: NSTextView {
         EditorDocument(text: string, metas: metas)
     }
 
+    /// Puts in a new content as one step that ⌘Z takes back whole, and ⇧⌘Z
+    /// brings back again: a voice command (spec 18.22).
+    func replace(with document: EditorDocument, actionName: String) {
+        let before = self.document
+        keysSinceLineStart = []
+        metas = document.metas
+        textStorage?.setAttributedString(NSAttributedString(string: document.text))
+        restyle()
+        undoManager?.registerUndo(withTarget: self) { view in
+            MainActor.assumeIsolated {
+                view.replace(with: before, actionName: actionName)
+            }
+        }
+        undoManager?.setActionName(actionName)
+        blockDelegate?.blockTextViewDidChangeContent(self)
+    }
+
+    /// Marks the lines with these ids, the title too when asked, like with a
+    /// highlighter, until the next restyle or `seconds` later.
+    func highlight(lines ids: Set<UUID>, title: Bool, for seconds: TimeInterval, color: NSColor) {
+        guard let storage = textStorage, seconds > 0 else { return }
+        let ranges = lineRanges()
+        storage.beginEditing()
+        for (index, range) in ranges.enumerated() where index < metas.count && range.length > 0 {
+            if ids.contains(metas[index].id) || (title && index == 0) {
+                storage.addAttribute(.backgroundColor, value: color, range: range)
+            }
+        }
+        storage.endEditing()
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
+            guard let self, let storage = self.textStorage else { return }
+            storage.removeAttribute(.backgroundColor, range: NSRange(location: 0, length: storage.length))
+        }
+    }
+
     // MARK: Lines
 
     /// Character range of every line, without its trailing line break.
@@ -312,7 +347,12 @@ final class BlockTextView: NSTextView {
         guard let layoutManager, let textContainer else { return 0 }
         layoutManager.ensureLayout(for: textContainer)
         let used = layoutManager.usedRect(for: textContainer)
-        return ceil(used.height) + textContainerInset.height * 2
+        var height = ceil(used.height) + textContainerInset.height * 2
+        // An empty sticker also shows the line about headings, points and tasks (spec 18.5).
+        if string.isEmpty, !placeholder.isEmpty {
+            height += 4 + MarkupHint.height(fittingWidth: bounds.width - textContainerOrigin.x * 2 - 4)
+        }
+        return height
     }
 
     /// Number of lines that start below `y` (in the text view's coordinates) or are cut by it.
@@ -438,6 +478,16 @@ final class BlockTextView: NSTextView {
         let origin = textContainerOrigin
         let point = NSPoint(x: origin.x, y: origin.y + style.baselineOffset(for: title))
         (placeholder as NSString).draw(at: point, withAttributes: attributes)
+        // Spec 18.5: how to start a heading, a point and a task; gone with the first character.
+        let font = style.font(for: title)
+        let hintY = point.y + ceil(font.ascender - font.descender + font.leading) + 4
+        let width = bounds.width - origin.x * 2 - 4
+        MarkupHint.draw(at: NSPoint(x: origin.x, y: hintY), width: width, color: style.color.textColor(alpha: 0.3))
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        MarkupHint.follow(self)
     }
 
     // MARK: Mouse

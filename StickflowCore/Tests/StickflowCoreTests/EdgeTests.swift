@@ -314,6 +314,26 @@ final class PlainTextPlanTests: XCTestCase {
         XCTAssertEqual(LabelFit.fontSize(base: 20, minimum: 13, widestWord: 69, available: 0), 20)
     }
 
+    func testTextThatIsAListAlready() {
+        XCTAssertTrue(PlainTextPlan.looksStructured("План\nКупить молоко"))
+        XCTAssertTrue(PlainTextPlan.looksStructured("- купить молоко"))
+        XCTAssertTrue(PlainTextPlan.looksStructured("  [] позвонить\n"))
+        XCTAssertTrue(PlainTextPlan.looksStructured("## Работа"))
+        XCTAssertFalse(PlainTextPlan.looksStructured("Сначала доделать экран, потом созвон в три"))
+        // The same keys on a Russian layout (spec 18.5): "№№" for "##", "хъ" for "[]".
+        XCTAssertTrue(PlainTextPlan.looksStructured("№№ Работа"))
+        XCTAssertTrue(PlainTextPlan.looksStructured("хъ купить молоко"))
+        XCTAssertFalse(PlainTextPlan.looksStructured("хъёмный"))
+        let russian = PlainTextPlan.make(from: "№№ Дом\nхъ помыть окна\nХъ  разобрать шкаф\nхъ ")
+        XCTAssertEqual(russian.title, "")
+        XCTAssertEqual(russian.blocks.map(\.kind), [.heading2, .todo, .todo])
+        XCTAssertEqual(russian.blocks.map(\.text), ["Дом", "помыть окна", "разобрать шкаф"])
+        XCTAssertFalse(PlainTextPlan.looksStructured("\n  Купить молоко  \n\n"))
+        XCTAssertFalse(PlainTextPlan.looksStructured(""))
+        let result = PlainTextPlan.Result(title: "План", blocks: [Block(kind: .todo, text: "Дело")])
+        XCTAssertFalse(result.isEmpty)
+    }
+
     func testEmptyInputGivesNothing() {
         XCTAssertTrue(PlainTextPlan.make(from: "  \n\n\t").isEmpty)
         XCTAssertTrue(PlainTextPlan.make(from: "").isEmpty)

@@ -22,6 +22,23 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.autoenablesItems = false
         statusItem.menu = menu
         rebuildMenu()
+        environment.models.observe { [weak self] in self?.showProgress() }
+        showProgress()
+    }
+
+    /// The download of the models is seen in the menu bar too (spec 18.10 A3).
+    private func showProgress() {
+        guard let button = statusItem.button else { return }
+        if case let .downloading(received, total) = environment.models.state, total > 0 {
+            statusItem.length = NSStatusItem.variableLength
+            button.imagePosition = .imageLeading
+            button.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+            button.title = " \(Int(Double(received) / Double(total) * 100))%"
+        } else {
+            button.title = ""
+            button.imagePosition = .imageOnly
+            statusItem.length = NSStatusItem.squareLength
+        }
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
@@ -47,6 +64,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let newItem = makeItem(L10n.menuNewSticker, action: #selector(newSticker), key: "\r")
         newItem.keyEquivalentModifierMask = [.command, .option]
         menu.addItem(newItem)
+        switch environment.models.state {
+        case let .downloading(received, total):
+            let percent = total > 0 ? Int(Double(received) / Double(total) * 100) : 0
+            menu.addItem(makeItem(L10n.menuModelsDownloading(percent: percent), action: #selector(showModelSetup)))
+        case .missing, .failed:
+            menu.addItem(makeItem(L10n.menuModels, action: #selector(showModelSetup)))
+        case .ready:
+            break
+        }
         if environment.stickers.areStickersHiddenByCapture {
             menu.addItem(makeItem(L10n.menuHiddenWhileSharing, action: nil, enabled: false))
             menu.addItem(.separator())
@@ -79,14 +105,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         loginMenuItem.state = environment.loginItem.isEnabled ? .on : .off
         menu.addItem(loginMenuItem)
 
-        // The settings window and the updater arrive in stage 4.
-        let settings = makeItem(L10n.menuSettings, action: nil, key: ",", enabled: false)
-        menu.addItem(settings)
+        // Sorting is set here (spec 18.10 C1); the rest of the settings and the updater arrive in stage 4.
+        menu.addItem(makeItem(L10n.menuSettings, action: #selector(showSettings), key: ","))
         menu.addItem(makeItem(L10n.menuCheckUpdates, action: nil, enabled: false))
 
         #if DEBUG
         menu.addItem(.separator())
         menu.addItem(makeItem("Tuning…", action: #selector(showTuningPanel)))
+        // Which build this is: the quickest answer to "am I running the new one?".
+        menu.addItem(makeItem(L10n.menuBuild(BuildStamp.text), action: nil, enabled: false))
         #endif
 
         menu.addItem(.separator())
@@ -150,6 +177,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         } catch {
             AppEnvironment.presentAlert(title: L10n.errorLoginItemTitle, error: error)
         }
+    }
+
+    @objc private func showSettings() {
+        environment.showSettings()
+    }
+
+    @objc private func showModelSetup() {
+        environment.showModelSetup()
     }
 
     #if DEBUG

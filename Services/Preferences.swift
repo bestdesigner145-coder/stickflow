@@ -77,6 +77,21 @@ final class Preferences {
     /// How many times the "hold ⌥ to edit" hint has been shown.
     var editHintShownCount: Int
 
+    // Structuring (spec 8.1). The window for these arrives with the settings (stage 4).
+    var structurerChoice: StructurerChoice
+    var ollamaHost: String
+    var ollamaModel: String
+    /// DeepSeek and other OpenAI-compatible services (spec 18.10 A4).
+    var openAIBaseURL: String
+    var openAIModel: String
+    /// ChatGPT, through OpenAI's own API.
+    var chatGPTModel: String
+    /// The server at `ollamaHost` is LM Studio or another that speaks OpenAI's API.
+    var localServerSpeaksOpenAI: Bool
+    var claudeModel: String
+    /// Providers the user allowed to receive text without being asked each time.
+    var cloudConsent: [String]
+
     @ObservationIgnored private let defaults: UserDefaults
 
     private enum Key {
@@ -95,6 +110,15 @@ final class Preferences {
         static let defaultColor = "defaultColor"
         static let stickerDisplayUUID = "stickerDisplayUUID"
         static let editHintShownCount = "editHintShownCount"
+        static let structurerChoice = "structurerChoice"
+        static let ollamaHost = "ollamaHost"
+        static let ollamaModel = "ollamaModel"
+        static let openAIBaseURL = "openAIBaseURL"
+        static let openAIModel = "openAIModel"
+        static let claudeModel = "claudeModel"
+        static let chatGPTModel = "chatGPTModel"
+        static let localServerSpeaksOpenAI = "localServerSpeaksOpenAI"
+        static let cloudConsent = "cloudConsent"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -112,6 +136,12 @@ final class Preferences {
             Key.showsEdgeTab: true,
             Key.defaultColor: PaperColor.default.rawValue,
             Key.editHintShownCount: 0,
+            Key.structurerChoice: StructurerChoice.local.rawValue,
+            Key.ollamaHost: "http://localhost:11434",
+            Key.claudeModel: ChatProvider.claudeDefaultModel,
+            Key.chatGPTModel: StructurerChoice.chatGPTDefaultModel,
+            Key.openAIBaseURL: StructurerChoice.deepSeekBaseURL,
+            Key.openAIModel: StructurerChoice.deepSeekModel,
         ])
 
         paperOpacity = Self.clamp(defaults.double(forKey: Key.paperOpacity), to: Self.paperOpacityRange)
@@ -127,6 +157,16 @@ final class Preferences {
         defaultColor = defaults.string(forKey: Key.defaultColor).flatMap { PaperColor(stored: $0) } ?? .default
         stickerDisplayUUID = defaults.string(forKey: Key.stickerDisplayUUID)
         editHintShownCount = defaults.integer(forKey: Key.editHintShownCount)
+        // The rules were a choice once; now they are only the fallback (spec 18.10 A4).
+        structurerChoice = defaults.string(forKey: Key.structurerChoice).flatMap(StructurerChoice.init(rawValue:)) ?? .local
+        ollamaHost = defaults.string(forKey: Key.ollamaHost) ?? ""
+        ollamaModel = defaults.string(forKey: Key.ollamaModel) ?? ""
+        openAIBaseURL = defaults.string(forKey: Key.openAIBaseURL) ?? ""
+        openAIModel = defaults.string(forKey: Key.openAIModel) ?? ""
+        claudeModel = defaults.string(forKey: Key.claudeModel) ?? ChatProvider.claudeDefaultModel
+        chatGPTModel = defaults.string(forKey: Key.chatGPTModel) ?? StructurerChoice.chatGPTDefaultModel
+        localServerSpeaksOpenAI = defaults.bool(forKey: Key.localServerSpeaksOpenAI)
+        cloudConsent = defaults.stringArray(forKey: Key.cloudConsent) ?? []
     }
 
     /// Writes the current values to `UserDefaults`, clamping numbers to their valid range.
@@ -151,6 +191,15 @@ final class Preferences {
             defaults.removeObject(forKey: Key.stickerDisplayUUID)
         }
         defaults.set(editHintShownCount, forKey: Key.editHintShownCount)
+        defaults.set(structurerChoice.rawValue, forKey: Key.structurerChoice)
+        defaults.set(ollamaHost, forKey: Key.ollamaHost)
+        defaults.set(ollamaModel, forKey: Key.ollamaModel)
+        defaults.set(openAIBaseURL, forKey: Key.openAIBaseURL)
+        defaults.set(openAIModel, forKey: Key.openAIModel)
+        defaults.set(claudeModel, forKey: Key.claudeModel)
+        defaults.set(chatGPTModel, forKey: Key.chatGPTModel)
+        defaults.set(localServerSpeaksOpenAI, forKey: Key.localServerSpeaksOpenAI)
+        defaults.set(cloudConsent, forKey: Key.cloudConsent)
     }
 
     private static func clamp(_ value: Double, to range: ClosedRange<Double>) -> Double {

@@ -54,6 +54,25 @@ final class StickerSnapshotTests: XCTestCase {
         }
     }
 
+    /// An empty sticker says how to start a heading, a point and a task (spec 18.5).
+    func testEmptySticker() {
+        MarkupHint.forcedRussianLayout = false
+        for theme in Theme.allCases {
+            let image = render(.plan, theme: theme, color: .default, isEmpty: true)
+            assertSnapshot(of: image, as: Self.strategy, named: theme.rawValue)
+        }
+    }
+
+    /// While a sticker is edited its glue strip carries a microphone (spec 18.4).
+    func testStickerWithMicrophone() {
+        for theme in Theme.allCases {
+            for recording in [false, true] {
+                let image = render(.plan, theme: theme, color: .default, microphone: recording ? .recording : .idle)
+                assertSnapshot(of: image, as: Self.strategy, named: "\(theme.rawValue)-\(recording ? "recording" : "idle")")
+            }
+        }
+    }
+
     // MARK: Rendering
 
     private func render(
@@ -62,7 +81,9 @@ final class StickerSnapshotTests: XCTestCase {
         fontSize: Double = 14,
         size: StickerSizeClass = .medium,
         color: PaperColor = .paper,
-        editKeyHeld: Bool = false
+        editKeyHeld: Bool = false,
+        isEmpty: Bool = false,
+        microphone: StripMicrophone.State? = nil
     ) -> NSImage {
         let clock = FixedClock.uiTesting
         let preferences = Preferences(defaults: Self.emptyDefaults())
@@ -73,6 +94,10 @@ final class StickerSnapshotTests: XCTestCase {
 
         var sticker = fixture.stickers(now: clock.now)[0]
         sticker.color = color
+        if isEmpty {
+            sticker.title = ""
+            sticker.blocks = []
+        }
         let controller = StickerController(sticker: sticker, tuning: tuning, preferences: preferences, clock: clock)
         defer { controller.close() }
 
@@ -91,6 +116,11 @@ final class StickerSnapshotTests: XCTestCase {
                 time: 0
             ))
             XCTAssertEqual(controller.mode, .editMode)
+        }
+        if let microphone {
+            controller.rootView.microphone.isAvailable = { true }
+            controller.rootView.isEditing = true
+            controller.rootView.microphone.state = microphone
         }
         return SnapshotRenderer.image(of: controller.rootView)
     }

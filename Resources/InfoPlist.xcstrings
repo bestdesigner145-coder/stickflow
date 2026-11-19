@@ -1,0 +1,23 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "NSMicrophoneUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stickflow records your voice only while the microphone in the draft is on, to turn it into task text. The recording is not kept."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stickflow записывает голос, только пока нажат микрофон в черновике, чтобы превратить его в текст задач. Запись не сохраняется."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

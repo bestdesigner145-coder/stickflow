@@ -1,0 +1,14 @@
+{
+  "kind": "gguf",
+  "id": "gemma-3-4b-it-q4km",
+  "name": "Gemma 3 4B Instruct, Q4_K_M",
+  "repo": "unsloth/gemma-3-4b-it-GGUF",
+  "revision": "5a3566e716d80f709ed7b79817eaf7733d2a1fce",
+  "file": "gemma-3-4b-it-Q4_K_M.gguf",
+  "quantization": "Q4_K_M",
+  "license": "Gemma Terms of Use",
+  "credit": "Google DeepMind (google/gemma-3-4b-it), GGUF by Unsloth. Gemma is provided under and subject to the Gemma Terms of Use found at ai.google.dev/gemma/terms",
+  "tag": "model-structuring-gemma-3-4b-1",
+  "title": "Structuring model: Gemma 3 4B Instruct (GGUF Q4_K_M)",
+  "publish": true
+}

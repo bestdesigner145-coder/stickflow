@@ -45,9 +45,10 @@ final class TuningPanelController {
             newWindow.center()
             window = newWindow
         }
-        NSApp.activate()
-        window?.makeKeyAndOrderFront(nil)
+        if let window { WindowPresenter.present(window) }
     }
+
+    var shownWindow: NSWindow? { window }
 }
 
 struct TuningPanelView: View {
@@ -151,7 +152,16 @@ struct TuningPanelView: View {
     private var fadeSection: some View {
         Section {
             SliderRow(title: "Faded opacity", value: $tuning.fadedOpacity, range: 0.05...1, onChange: onTuningChange)
+            SliderRow(
+                title: "Structured preview before sticking, s",
+                value: $tuning.structuredPreviewDuration,
+                range: 0...3,
+                onChange: onTuningChange
+            )
             SliderRow(title: "Halo radius, pt", value: $tuning.haloRadius, range: 0...300, onChange: onTuningChange)
+            SliderRow(title: "Pad shadow radius, pt", value: $tuning.padShadowRadius, range: 0...32, onChange: onTuningChange)
+            SliderRow(title: "Pad shadow opacity", value: $tuning.padShadowOpacity, range: 0...0.5, onChange: onTuningChange)
+            SliderRow(title: "Pad oval opacity", value: $tuning.padGlowOpacity, range: 0...0.3, onChange: onTuningChange)
             SliderRow(title: "Halo: full fade within, pt", value: $tuning.haloCore, range: 0...120, onChange: onTuningChange)
             SliderRow(title: "Fade out, s", value: $tuning.fadeOutDuration, range: 0...0.6, onChange: onTuningChange)
             SliderRow(title: "Fade in, s", value: $tuning.fadeInDuration, range: 0...0.6, onChange: onTuningChange)
@@ -192,11 +202,11 @@ struct TuningPanelView: View {
                       onChange: onTuningChange)
             SliderRow(title: "Max height, pt", value: $tuning.maxPaperHeight, range: 120...600, step: 1,
                       onChange: onTuningChange)
-            SliderRow(title: "Width S, pt", value: $tuning.widthSmall, range: 140...260, step: 1,
+            SliderRow(title: "Width S, pt", value: $tuning.widthSmall, range: 180...320, step: 1,
                       onChange: onTuningChange)
-            SliderRow(title: "Width M, pt", value: $tuning.widthMedium, range: 180...300, step: 1,
+            SliderRow(title: "Width M, pt", value: $tuning.widthMedium, range: 240...400, step: 1,
                       onChange: onTuningChange)
-            SliderRow(title: "Width L, pt", value: $tuning.widthLarge, range: 220...400, step: 1,
+            SliderRow(title: "Width L, pt", value: $tuning.widthLarge, range: 300...480, step: 1,
                       onChange: onTuningChange)
         } header: {
             Text(verbatim: "Geometry (4.5, 4.6)")
@@ -219,10 +229,12 @@ struct TuningPanelView: View {
                       isOn: $tuning.spacesBehaviorTransient, onChange: onTuningChange)
             ToggleRow(title: "Zone: reject fast entry",
                       isOn: $tuning.zoneRejectsFastEntry, onChange: onTuningChange)
-            ToggleRow(title: "Draft with text closes when focus is lost (kept as a draft)",
-                      isOn: $tuning.draftWithTextClosesOnFocusLoss, onChange: onTuningChange)
+            ToggleRow(title: "Rules: «в три» without «дня» means 15:00",
+                      isOn: $tuning.rulesAssumeAfternoon, onChange: onTuningChange)
             ToggleRow(title: "⌘Z restores a peeled sticker while the toast is up",
                       isOn: $tuning.undoPeelUsesCommandZ, onChange: onTuningChange)
+            ToggleRow(title: "Pad goes back on the reversed drawer curve",
+                      isOn: $tuning.padHideCurveReversed, onChange: onTuningChange)
         } header: {
             Text(verbatim: "Behaviour variants (rule 0.3)")
         }
@@ -244,6 +256,9 @@ struct TuningPanelView: View {
             SliderRow(title: "Appear start scale", value: $tuning.appearStartScale, range: 0.8...1,
                       onChange: onTuningChange)
             SliderRow(title: "Peel, s", value: $tuning.peelDuration, range: 0...0.6, onChange: onTuningChange)
+            SliderRow(title: "Pad back, s", value: $tuning.padHideDuration, range: 0...0.6, onChange: onTuningChange)
+            SliderRow(title: "Pad fade with Reduce motion, s", value: $tuning.padReduceMotionFade, range: 0...0.6,
+                      onChange: onTuningChange)
             SliderRow(title: "Peel end scale", value: $tuning.peelEndScale, range: 0.1...1, onChange: onTuningChange)
             SliderRow(title: "Theme change, s", value: $tuning.themeTransitionDuration, range: 0...0.6,
                       onChange: onTuningChange)

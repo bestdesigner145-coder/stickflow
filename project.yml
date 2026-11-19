@@ -16,6 +16,8 @@ settings:
     MACOSX_DEPLOYMENT_TARGET: "14.0"
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
+    # Set on the command line by scripts/run.sh and by CI; empty in a build from Xcode.
+    STICKFLOW_COMMIT: ""
     # Bundle ID is permanent: permissions, settings and updates are tied to it.
     STICKFLOW_BUNDLE_ID: io.github.stickflow
     # Warnings are errors in every configuration (spec 17.3).
@@ -35,6 +37,9 @@ settings:
 packages:
   StickflowCore:
     path: StickflowCore
+  # The model that takes dictation apart, run by llama.cpp (spec 18.10).
+  StickflowLocalModel:
+    path: LocalModel
   GRDB:
     url: https://github.com/groue/GRDB.swift
     from: "7.0.0"
@@ -58,6 +63,8 @@ targets:
       - path: Tuning.swift
     dependencies:
       - package: StickflowCore
+      - package: StickflowLocalModel
+        product: LocalModel
       - package: GRDB
       - package: KeyboardShortcuts
     info:
@@ -72,7 +79,12 @@ targets:
         # Agent app: no Dock icon, lives in the menu bar (spec 5.1).
         LSUIElement: true
         NSPrincipalClass: NSApplication
+        # Asked for at the first press of the microphone in the draft (spec 7).
+        # Russian texts are in Resources/InfoPlist.xcstrings.
+        NSMicrophoneUsageDescription: "Stickflow records your voice only while the microphone in the draft is on, to turn it into task text. The recording is not kept."
         NSHumanReadableCopyright: "Stickflow contributors. Free software under GPL-3.0."
+        # The commit the build was made from, shown in the menu; see scripts/run.sh.
+        StickflowCommit: $(STICKFLOW_COMMIT)
     settings:
       base:
         PRODUCT_NAME: Stickflow

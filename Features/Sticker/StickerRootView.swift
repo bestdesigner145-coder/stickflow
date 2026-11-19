@@ -61,6 +61,8 @@ final class StickerRootView: NSView {
     private let moreLabel = NSTextField(labelWithString: "")
     private let menuButton = FirstClickButton.symbol("ellipsis", pointSize: 11, description: L10n.stickerStripMenu)
     private let closeButton = FirstClickButton.symbol("xmark", pointSize: 9, description: L10n.stickerMenuPeel)
+    /// Dictation into this sticker, at the left end of the glue strip (spec 18.4).
+    let microphone = StripMicrophone()
     private var trackingArea: NSTrackingArea?
     private var isOverflowing = false
     private var hasCounter = false
@@ -78,6 +80,7 @@ final class StickerRootView: NSView {
     var isEditing = false {
         didSet {
             if isEditing != oldValue { refreshOverflow() }
+            microphone.isEditing = isEditing
         }
     }
 
@@ -121,6 +124,7 @@ final class StickerRootView: NSView {
         addSubview(counterLabel)
         addSubview(menuButton)
         addSubview(closeButton)
+        addSubview(microphone.button)
         addSubview(foldOverlay)
 
         // The counter sits on the title line, so it has to follow the text when it scrolls.
@@ -312,6 +316,8 @@ final class StickerRootView: NSView {
             width: buttonWidth,
             height: metrics.stripHeight
         )
+
+        microphone.button.frame = NSRect(x: paper.minX + 3, y: paper.minY, width: buttonWidth, height: metrics.stripHeight)
 
         // The fade starts over the last visible lines and stays solid down to the paper's edge.
         let fadeHeight = min(Self.overflowFadeHeight, textHeight / 2)
@@ -521,6 +527,7 @@ final class StickerRootView: NSView {
         moreLabel.textColor = color.textColor(alpha: 0.55)
         menuButton.contentTintColor = color.textColor(alpha: 0.6)
         closeButton.contentTintColor = color.textColor(alpha: 0.6)
+        microphone.tint = color.textColor(alpha: 0.6)
         textView.needsDisplay = true
     }
 
@@ -568,6 +575,7 @@ final class StickerRootView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? {
         let local = superview.map { convert(point, from: $0) } ?? point
         guard paperRect.contains(local) else { return nil }
+        if !microphone.button.isHidden, microphone.button.frame.contains(local) { return microphone.button }
         if showsChrome {
             if closeButton.frame.contains(local) { return closeButton }
             if menuButton.frame.contains(local) { return menuButton }

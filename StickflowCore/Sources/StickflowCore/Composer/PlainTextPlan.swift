@@ -10,8 +10,28 @@ public enum PlainTextPlan {
         public var title: String
         public var blocks: [Block]
 
+        public init(title: String, blocks: [Block]) {
+            self.title = title
+            self.blocks = blocks
+        }
+
         public var isEmpty: Bool { title.isEmpty && blocks.isEmpty }
     }
+
+    /// The text is a list already: several lines, or a line that starts with a
+    /// marker. Such text is stuck as it is; one paragraph, typed or dictated, is
+    /// for a structurer to take apart (spec 8).
+    public static func looksStructured(_ text: String) -> Bool {
+        let lines = text.split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        guard lines.count == 1, let only = lines.first else { return lines.count > 1 }
+        return marker(in: only) != nil
+    }
+
+    /// "[] " typed on a Russian layout. The sticker's editor knows the keys by
+    /// their place; plain text has only the letters, and "хъ" is not a word.
+    static let russianTodoPrefix = "хъ "
 
     /// - Parameter plainLineKind: what a line without a marker becomes. A sticker
     ///   is a list of things to do, so the default is a task.
@@ -47,6 +67,11 @@ public enum PlainTextPlan {
     /// The block shortcut `line` starts with and the text after it. The trailing
     /// space of a marker may have been trimmed away ("-" for "- ").
     private static func marker(in line: String) -> (match: BlockShortcut.Match, content: String)? {
+        // The trailing space may have been trimmed away, as with "-".
+        if (line + " ").lowercased().hasPrefix(russianTodoPrefix) {
+            let rest = String(line.dropFirst(russianTodoPrefix.count)).trimmingCharacters(in: .whitespaces)
+            return (BlockShortcut.Match(kind: .todo, done: false, prefixLength: russianTodoPrefix.utf16.count), rest)
+        }
         guard let match = BlockShortcut.match(in: line) ?? BlockShortcut.match(in: line + " ") else { return nil }
         let rest = String(line.utf16.dropFirst(match.prefixLength)) ?? ""
         return (match, rest.trimmingCharacters(in: .whitespaces))
