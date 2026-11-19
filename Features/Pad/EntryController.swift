@@ -700,17 +700,15 @@ final class EntryController: NSObject {
     #if DEBUG
     /// For the self-check's snapshots.
     var padSnapshotView: NSView { padView }
+    /// How far in time the pad's move is, 0…1; `nil` when it is not moving.
+    var padMoveProgress: Double? {
+        guard let layer = padContainer.layer, let move = layer.animation(forKey: "slideMove"), move.duration > 0 else { return nil }
+        let now = layer.convertTime(CACurrentMediaTime(), from: nil)
+        return (now - move.beginTime) / move.duration
+    }
+
     /// The pad is fading in or out right now ("Reduce motion").
     var padIsFading: Bool { padContainer.layer?.animation(forKey: "fade") != nil }
-
-    /// The pad's layer as the self-check sees it: animations, model and drawn position.
-    var padMotionNote: String {
-        guard let layer = padContainer.layer else { return "no layer" }
-        let shown = layer.presentation()
-        return "animations \(layer.animationKeys() ?? []), model x \(layer.position.x), "
-            + "drawn x \(shown.map { "\($0.position.x)" } ?? "nil"), frame x \(padContainer.frame.minX), "
-            + "superlayer \(layer.superlayer != nil), phase \(phase)"
-    }
 
     /// Where the pad is drawn right now, in the middle of a move: how much of it
     /// is out of the screen edge, and its opacity (fix K1).
