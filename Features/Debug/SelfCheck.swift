@@ -517,7 +517,7 @@ enum SelfCheck {
 
                 // Fix K1: the pad goes back as it came out, slowly at first; it does not vanish.
                 let reachOut = entry.padOnScreen.reach
-                hold(far, for: 0.05)
+                hold(far, for: 0.5)
                 await pause(0.07)
                 let early = entry.padOnScreen.reach
                 await pause(0.3)
@@ -529,7 +529,7 @@ enum SelfCheck {
                 hold(spot, for: 0.7)
                 await pause(0.4)
                 check(entry.phase == .open && entry.padOnScreen.opacity > 0.99, "with Reduce motion the pad is out")
-                hold(far, for: 0.05)
+                hold(far, for: 0.5)
                 await pause(0.07)
                 let fading = entry.padOnScreen
                 await pause(0.3)
@@ -537,6 +537,8 @@ enum SelfCheck {
                       "with Reduce motion it fades in place (opacity \(fading.opacity), \(Int(fading.reach)) pt)")
                 check(entry.padOnScreen.opacity < 0.01, "and is gone once faded")
                 tuning.forcedReduceMotion = nil
+                hold(spot, for: 0.7)
+                await pause(0.4)
 
                 let stickersBefore = stickers.controllers.count
                 entry.openDraft(from: .pad)
