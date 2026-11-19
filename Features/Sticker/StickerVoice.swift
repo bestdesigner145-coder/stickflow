@@ -18,6 +18,10 @@ final class StickerVoice {
     private var work: Task<Void, Never>?
     /// True while the draft has the microphone.
     var isBlocked: () -> Bool = { false }
+    /// A model's reading of what was said into a sticker (spec 18.22); `nil` — no model, append.
+    var makeEdit: @MainActor (StickerEditRequest) async -> Result<StickerEdit, any Error>? = { _ in nil }
+    /// The provider's name, for "No Claude key".
+    var providerName: () -> String = { "" }
 
     init(dictation: Dictation, stickers: StickerManager, models: ModelsSetup, makePlan: @escaping @MainActor (String) async -> NotePlan?) {
         self.dictation = dictation
@@ -83,7 +87,17 @@ final class StickerVoice {
     private func add(_ text: String) {
         guard let controller = target else { return }
         let makePlan = self.makePlan
+        let makeEdit = self.makeEdit
+        let request = StickerEditRequest(title: controller.sticker.title, blocks: controller.sticker.blocks, text: text)
         work = Task { [weak self] in
+            // A model reads commands ("отметь созвон") as well as new thoughts (spec 18.22).
+            if let edited = await makeEdit(request) {
+                guard let self, !Task.isCancelled else { return }
+                self.work = nil
+                if !controller.isClosed { self.apply(edited, said: text, to: controller) }
+                self.show()
+                return
+            }
             let plan = await makePlan(text)
             guard let self, !Task.isCancelled else { return }
             self.work = nil
@@ -95,5 +109,30 @@ final class StickerVoice {
             self.show()
         }
         show()
+    }
+
+    private func apply(_ edited: Result<StickerEdit, any Error>, said text: String, to controller: StickerController) {
+        switch edited {
+        case let .success(edit):
+            do {
+                let result = try edit.apply(title: controller.sticker.title, to: controller.sticker.blocks)
+                stickers.applyEdit(result, to: controller)
+            } catch StickerEdit.Failure.unclearLine {
+                stickers.note(L10n.voiceUnclearLine, under: controller)
+            } catch {
+                // Nothing changed: what was said is not lost.
+                stickers.append(Self.asSaid(text), to: controller)
+            }
+        case let .failure(error):
+            // What was said stays in the sticker; the note says why it was not understood.
+            stickers.append(Self.asSaid(text), to: controller)
+            if let error = error as? StructurerError, let reason = L10n.stickerEditFailure(error, provider: providerName()) {
+                stickers.note(reason, under: controller)
+            }
+        }
+    }
+
+    private static func asSaid(_ text: String) -> NotePlan {
+        NotePlan(title: "", sections: [NotePlan.Section(items: [NotePlan.Item(text: text)])])
     }
 }

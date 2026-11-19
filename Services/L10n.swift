@@ -83,8 +83,22 @@ enum L10n {
 
     static var menuModels: String { String(localized: "menu.models") }
 
-    // Structuring without the model, and its failures (spec 18.10 A3, C2).
+    /// Structuring without the model, and its failures (spec 18.10 A3, C2).
     static var toastStructureLater: String { String(localized: "toast.structure_later") }
+    // Voice commands for a sticker (spec 18.22).
+    static var voiceUnclearLine: String { String(localized: "voice.unclear_line") }
+    static var voiceCommand: String { String(localized: "voice.command") }
+    /// What a sticker says under it when a command could not be sent; `nil` — nothing to say.
+    static func stickerEditFailure(_ error: StructurerError, provider: String) -> String? {
+        switch error {
+        case .missingKey: structureNoKey(provider)
+        case .rejectedKey: structureBadKey(provider)
+        case .noCredit: structureNoCredit(provider)
+        case .noModel: structureNoModel(provider)
+        default: nil
+        }
+    }
+
     static var toastStructureReady: String { String(localized: "toast.structure_ready") }
     static var toastStructure: String { String(localized: "toast.structure") }
     static var toastDownload: String { String(localized: "toast.download") }

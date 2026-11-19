@@ -30,6 +30,16 @@ public struct LocalStructurer: Structurer {
         return plan.titled(apartFrom: request.takenTitles, at: request.now)
     }
 
+    public var editsStickers: Bool { true }
+
+    /// Voice commands for a sticker (spec 18.22), held to the grammar of operations.
+    public func edit(_ request: StickerEditRequest) async throws -> StickerEdit {
+        let format = try await runner.promptFormat() ?? .chatML(thinkingOff: true)
+        let prompt = format.render(StickerEditPrompt.messages(for: request))
+        let answer = try await runner.generate(prompt: prompt, grammar: StickerEditPrompt.grammar)
+        return try StickerEdit.parse(answer.text)
+    }
+
     /// Loads the model and reads the rules and examples, which every request
     /// begins with, while the user is still speaking.
     public func prime() async {

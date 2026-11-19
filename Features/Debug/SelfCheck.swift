@@ -1006,6 +1006,53 @@ enum SelfCheck {
                 await pause(0.2)
                 check(microphone.button.isHidden, "the microphone leaves with the editing")
                 snapshot(target, name: "19b-appended")
+
+                // 18b. Voice commands (spec 18.22): a model's operations change the lines,
+                // the changed ones are highlighted, ⌘Z takes the whole command back.
+                let structurerBefore = entry.structurer
+                let before = (title: target.sticker.title, blocks: target.sticker.blocks)
+                entry.structurer = CommandStructurer(answer: StickerEdit(operations: [
+                    .check(target: 1), .addChildren(target: 2, items: ["до пятницы"]), .rename("Дела на неделю"),
+                ]))
+                target.beginEditing(at: nil)
+                await pause(0.2)
+                microphone.onClick?()
+                await pause(0.4)
+                microphone.onClick?()
+                await pause(1.2)
+                let edited = target.sticker.blocks
+                check(
+                    edited.first?.done == true && edited.count == before.blocks.count + 1
+                        && edited[2].text == "до пятницы" && edited[2].indent == 1 && target.sticker.title == "Дела на неделю",
+                    "a command checks, adds a point under a line and renames (\(target.sticker.title): \(edited.map(\.text)))"
+                )
+                let marked = target.rootView.textView.textStorage.map { storage in
+                    var found = false
+                    storage.enumerateAttribute(.backgroundColor, in: NSRange(location: 0, length: storage.length)) { value, _, _ in
+                        if value != nil { found = true }
+                    }
+                    return found
+                } ?? false
+                check(marked, "the changed lines are highlighted")
+                snapshot(target, name: "19c-command")
+                target.rootView.textView.undoManager?.undo()
+                await pause(0.2)
+                check(
+                    target.sticker.blocks.map(\.text) == before.blocks.map(\.text) && target.sticker.title == before.title
+                        && target.sticker.blocks.first?.done == before.blocks.first?.done,
+                    "⌘Z takes the whole command back (\(target.sticker.title))"
+                )
+                entry.structurer = CommandStructurer(answer: StickerEdit(unsure: true, operations: []))
+                microphone.onClick?()
+                await pause(0.4)
+                microphone.onClick?()
+                await pause(1.2)
+                check(target.sticker.blocks.map(\.text) == before.blocks.map(\.text) && stickers.isNoteVisible,
+                      "an unclear line changes nothing and says «Не понял, какой пункт»")
+                stickers.hideNote()
+                target.endEditing()
+                entry.structurer = structurerBefore
+                await pause(0.2)
             } else {
                 check(false, "there is a sticker to dictate into")
             }
@@ -1076,6 +1123,24 @@ enum SelfCheck {
 }
 
 /// A structurer that answers late, or fails late: for the draft's waiting states.
+/// A model that answers every command the same way (spec 18.22).
+private struct CommandStructurer: Structurer {
+    let id = "command"
+    let displayName = "Command"
+    let isLocal = true
+    let answer: StickerEdit
+
+    func health() async -> StructurerHealth { .ready }
+
+    func structure(_ request: StructureRequest) async throws -> NotePlan {
+        RuleStructurer.plan(from: request.text)
+    }
+
+    var editsStickers: Bool { true }
+
+    func edit(_: StickerEditRequest) async throws -> StickerEdit { answer }
+}
+
 private struct SlowStructurer: Structurer {
     let id = "slow"
     let displayName = "Slow"

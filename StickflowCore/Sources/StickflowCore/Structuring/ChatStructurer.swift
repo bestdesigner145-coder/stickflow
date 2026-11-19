@@ -177,12 +177,21 @@ public struct ChatStructurer: Structurer {
         }
     }
 
-    private func ask(_ messages: [ChatMessage]) async throws -> String {
+    public var editsStickers: Bool { true }
+
+    /// Voice commands for a sticker (spec 18.22). The plan's schema does not fit
+    /// operations, so the answer's format is named by the prompt alone.
+    public func edit(_ request: StickerEditRequest) async throws -> StickerEdit {
+        let messages = StickerEditPrompt.messages(for: request)
+        return try await StickerEdit.parse(ask(messages, structured: false))
+    }
+
+    private func ask(_ messages: [ChatMessage], structured: Bool = true) async throws -> String {
         let key = apiKey()
         // A service on the internet takes no request without a key (spec 18.10 C2).
         if provider.needsKey, (key ?? "").isEmpty { throw StructurerError.missingKey }
-        var response = try await send(provider.request(messages: messages, apiKey: key))
-        if response.status == 400 || response.status == 422, provider.id != "claude" {
+        var response = try await send(provider.request(messages: messages, apiKey: key, structured: structured))
+        if structured, response.status == 400 || response.status == 422, provider.id != "claude" {
             // A server that does not know schema-bound answers: ask plainly, the prompt names the format.
             response = try await send(provider.request(messages: messages, apiKey: key, structured: false))
         }

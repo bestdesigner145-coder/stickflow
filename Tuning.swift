@@ -117,6 +117,8 @@ final class Tuning {
     var padHideCurveReversed = true
     /// "Reduce motion": the pad does not travel, it fades in and out (spec 6.7, fix K1).
     var padReduceMotionFade: Double = 0.15
+    /// How long the lines a voice command changed stay highlighted (spec 18.22).
+    var voiceEditHighlight: Double = 1.2
     /// The pad's shadow: wide and faint (fix H5).
     var padShadowRadius: Double = 20
     var padShadowOpacity: Double = 0.2

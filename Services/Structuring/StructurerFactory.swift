@@ -132,6 +132,13 @@ struct BuiltInStructurer: Structurer {
             return plan.titled(apartFrom: request.takenTitles, at: request.now)
         }
     }
+
+    var editsStickers: Bool { model?.editsStickers ?? false }
+
+    func edit(_ request: StickerEditRequest) async throws -> StickerEdit {
+        guard let model else { throw StructurerError.modelDownloading(percent) }
+        return try await model.edit(request)
+    }
 }
 
 /// A provider whose settings lack something the user must choose: it says what.
@@ -146,6 +153,13 @@ struct UnconfiguredStructurer: Structurer {
     }
 
     func structure(_ request: StructureRequest) async throws -> NotePlan {
+        throw error
+    }
+
+    /// A model is chosen, only something is missing: a command says what (spec 18.22).
+    var editsStickers: Bool { true }
+
+    func edit(_: StickerEditRequest) async throws -> StickerEdit {
         throw error
     }
 }

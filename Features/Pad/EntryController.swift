@@ -87,6 +87,10 @@ final class EntryController: NSObject {
         let voice = StickerVoice(dictation: stickerDictation, stickers: stickers, models: models) { [weak self] text in
             await self?.plan(for: text) ?? nil
         }
+        voice.makeEdit = { [weak self] request in
+            await self?.stickerEdit(request) ?? nil
+        }
+        voice.providerName = { [weak self] in self?.preferences.structurerChoice.name ?? "" }
         // One microphone: the draft's dictation comes first.
         voice.isBlocked = { [weak self] in self?.draft.isOpen ?? false }
         self.voice = voice
@@ -678,6 +682,40 @@ final class EntryController: NSObject {
         let limit = limit(for: structurer)
         guard let plan = try? await Self.run(structurer, request, limit: limit).get(), !plan.isEmpty else { return nil }
         return plan
+    }
+
+    /// What was said into a sticker, as a model reads it (spec 18.22): commands
+    /// for its lines, or new lines. `nil`: no model, the dictation is appended as before.
+    func stickerEdit(_ request: StickerEditRequest) async -> Result<StickerEdit, any Error>? {
+        var structurer = self.structurer
+        if !structurer.isLocal, !preferences.cloudConsent.contains(structurer.id) {
+            structurer = makeBuiltIn()
+        }
+        guard structurer.editsStickers else { return nil }
+        return await Self.runEdit(structurer, request, limit: limit(for: structurer))
+    }
+
+    private nonisolated static func runEdit(
+        _ structurer: any Structurer,
+        _ request: StickerEditRequest,
+        limit: TimeInterval
+    ) async -> Result<StickerEdit, any Error> {
+        await withTaskGroup(of: Result<StickerEdit, any Error>.self) { group in
+            group.addTask {
+                do {
+                    return try await .success(structurer.edit(request))
+                } catch {
+                    return .failure(error)
+                }
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: UInt64(max(limit, 0) * 1_000_000_000))
+                return .failure(StructurerError.timedOut)
+            }
+            let first = await group.next() ?? .failure(StructurerError.timedOut)
+            group.cancelAll()
+            return first
+        }
     }
 
     private func stick(_ plan: PlainTextPlan.Result, rawInput text: String) {

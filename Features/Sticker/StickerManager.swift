@@ -207,6 +207,19 @@ final class StickerManager: NSObject {
         return true
     }
 
+    /// A voice command changed the sticker (spec 18.22): one step for ⌘Z, the
+    /// changed lines highlighted for a moment.
+    func applyEdit(_ result: StickerEdit.Result, to controller: StickerController) {
+        showAll()
+        let editor = controller.rootView.textView
+        editor.replace(with: EditorDocument(title: result.title, blocks: result.blocks), actionName: L10n.voiceCommand)
+        editor.highlight(
+            lines: result.changed, title: result.renamed, for: tuning.scaled(tuning.voiceEditHighlight),
+            color: NSColor.systemOrange.withAlphaComponent(0.28)
+        )
+        persist(controller)
+    }
+
     /// The sticker's content becomes `plan`: "Sort into tasks" once the model is here (spec 18.10 A3).
     func replace(_ plan: NotePlan, in controller: StickerController) {
         let editor = controller.rootView.textView

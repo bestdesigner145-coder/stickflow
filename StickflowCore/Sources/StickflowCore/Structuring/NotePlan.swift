@@ -197,4 +197,7 @@ public protocol Structurer: Sendable {
     var isLocal: Bool { get }
     func health() async -> StructurerHealth
     func structure(_ request: StructureRequest) async throws -> NotePlan
+    /// True for a model, which understands voice commands for a sticker (spec 18.22).
+    var editsStickers: Bool { get }
+    func edit(_ request: StickerEditRequest) async throws -> StickerEdit
 }

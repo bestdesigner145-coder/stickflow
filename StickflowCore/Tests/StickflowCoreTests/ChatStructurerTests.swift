@@ -5,7 +5,7 @@
 import XCTest
 
 /// Answers from a script and remembers what it was asked.
-private actor ScriptedNetwork: Network {
+actor ScriptedNetwork: Network {
     private var answers: [(String, Int)]
     private(set) var requests: [URLRequest] = []
 

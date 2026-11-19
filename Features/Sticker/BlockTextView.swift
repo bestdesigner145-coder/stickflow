@@ -146,6 +146,39 @@ final class BlockTextView: NSTextView {
         EditorDocument(text: string, metas: metas)
     }
 
+    /// Puts in a new content as one step that ⌘Z takes back whole, and ⇧⌘Z
+    /// brings back again: a voice command (spec 18.22).
+    func replace(with document: EditorDocument, actionName: String) {
+        let before = self.document
+        keysSinceLineStart = []
+        metas = document.metas
+        textStorage?.setAttributedString(NSAttributedString(string: document.text))
+        restyle()
+        undoManager?.registerUndo(withTarget: self) { view in
+            view.replace(with: before, actionName: actionName)
+        }
+        undoManager?.setActionName(actionName)
+        blockDelegate?.blockTextViewDidChangeContent(self)
+    }
+
+    /// Marks the lines with these ids, the title too when asked, like with a
+    /// highlighter, until the next restyle or `seconds` later.
+    func highlight(lines ids: Set<UUID>, title: Bool, for seconds: TimeInterval, color: NSColor) {
+        guard let storage = textStorage, seconds > 0 else { return }
+        let ranges = lineRanges()
+        storage.beginEditing()
+        for (index, range) in ranges.enumerated() where index < metas.count && range.length > 0 {
+            if ids.contains(metas[index].id) || (title && index == 0) {
+                storage.addAttribute(.backgroundColor, value: color, range: range)
+            }
+        }
+        storage.endEditing()
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
+            guard let self, let storage = self.textStorage else { return }
+            storage.removeAttribute(.backgroundColor, range: NSRange(location: 0, length: storage.length))
+        }
+    }
+
     // MARK: Lines
 
     /// Character range of every line, without its trailing line break.

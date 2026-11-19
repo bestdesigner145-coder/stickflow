@@ -1836,6 +1836,40 @@
           }
         }
       }
+    },
+    "voice.unclear_line": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Didn't catch which item"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не понял, какой пункт"
+          }
+        }
+      }
+    },
+    "voice.command": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voice Command"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Голосовая команда"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
