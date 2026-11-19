@@ -78,10 +78,11 @@ final class StickerEditTests: XCTestCase {
     }
 
     func testMoveDoesNotLandInsideAnotherLinesPoints() throws {
-        let result = try apply(#"{"unsure": false, "ops": [{"op": "move", "target": 5, "position": 4}]}"#)
+        // Place 3 is the point under "Посмотреть макеты": the line goes after that point.
+        let result = try apply(#"{"unsure": false, "ops": [{"op": "move", "target": 1, "position": 3}]}"#)
         XCTAssertEqual(
-            texts(result)[2...4],
-            ["- Посмотреть макеты экрана лимита", "  - только тёмная тема", "[ ] Написать пост про запуск"]
+            texts(result)[1...3],
+            ["- Посмотреть макеты экрана лимита", "  - только тёмная тема", "[ ] Доделать калькулятор"]
         )
     }
 
