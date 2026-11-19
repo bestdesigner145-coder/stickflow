@@ -155,7 +155,9 @@ final class BlockTextView: NSTextView {
         textStorage?.setAttributedString(NSAttributedString(string: document.text))
         restyle()
         undoManager?.registerUndo(withTarget: self) { view in
-            view.replace(with: before, actionName: actionName)
+            MainActor.assumeIsolated {
+                view.replace(with: before, actionName: actionName)
+            }
         }
         undoManager?.setActionName(actionName)
         blockDelegate?.blockTextViewDidChangeContent(self)

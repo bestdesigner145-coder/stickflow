@@ -1019,7 +1019,10 @@ enum SelfCheck {
                 microphone.onClick?()
                 await pause(0.4)
                 microphone.onClick?()
-                await pause(1.2)
+                // The highlight lasts 1.2 s: read it as soon as the command has landed.
+                for _ in 0..<60 where target.sticker.title != "Дела на неделю" {
+                    await pause(0.05)
+                }
                 let edited = target.sticker.blocks
                 check(
                     edited.first?.done == true && edited.count == before.blocks.count + 1
