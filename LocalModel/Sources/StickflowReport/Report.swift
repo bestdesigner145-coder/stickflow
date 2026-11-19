@@ -55,6 +55,14 @@ enum Report {
         func values(_ name: String) -> [String] {
             arguments.indices.filter { arguments[$0] == name && $0 + 1 < arguments.count }.map { arguments[$0 + 1] }
         }
+        if let model = value("--edits") {
+            let text = await EditReport.run(model: model)
+            if let output = value("--output") {
+                try? text.write(toFile: output, atomically: true, encoding: .utf8)
+            }
+            print(text)
+            return
+        }
         guard let fixtures = value("--fixtures") else {
             say("usage: stickflow-report --fixtures <semantic.json> [--local name=file.gguf] [--output file] [--json file]")
             exit(2)

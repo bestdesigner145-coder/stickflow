@@ -187,3 +187,29 @@ jobs:
             demo/first-launch.mp4
             demo/demo.txt
             demo/app.log
+
+  # Spec 18.22: voice commands for a sticker through the built-in model ([edits]).
+  edits:
+    name: Voice commands with the built-in model
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[edits]') }}
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the report
+        run: swift build -c release --package-path LocalModel --product stickflow-report
+
+      - name: Download the model
+        run: |
+          mkdir -p report
+          python3 scripts/fetch-gguf.py unsloth/gemma-3-4b-it-GGUF Q4_K_M.gguf "$RUNNER_TEMP/model.gguf" report/facts.json
+        env:
+          PYTHONUNBUFFERED: "1"
+
+      - name: Commands
+        run: |
+          BIN="$(swift build -c release --package-path LocalModel --show-bin-path)/stickflow-report"
+          "$BIN" --edits "$RUNNER_TEMP/model.gguf" --output report/edits.md \
+            || STICKFLOW_GPU_LAYERS=0 "$BIN" --edits "$RUNNER_TEMP/model.gguf" --output report/edits.md
+          cat report/edits.md | tee -a "$GITHUB_STEP_SUMMARY"
