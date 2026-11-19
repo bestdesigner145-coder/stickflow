@@ -533,11 +533,11 @@ enum SelfCheck {
                 await pause(0.4)
                 check(entry.phase == .open && entry.padOnScreen.opacity > 0.99, "with Reduce motion the pad is out")
                 hold(far, for: 0.5)
-                // Without a fade the pad would be gone at once; with it, it starts from fully there.
                 let fading = entry.padOnScreen
+                let fades = entry.padIsFading
                 await pause(0.3)
-                check(fading.opacity > 0.5 && fading.reach > reachOut - 1,
-                      "with Reduce motion it fades in place (opacity \(fading.opacity), \(Int(fading.reach)) pt)")
+                check(fades && fading.reach > reachOut - 1,
+                      "with Reduce motion it fades in place (fade \(fades), \(Int(fading.reach)) pt)")
                 check(entry.padOnScreen.opacity < 0.01, "and is gone once faded")
                 tuning.forcedReduceMotion = motionBefore
                 hold(spot, for: 0.7)

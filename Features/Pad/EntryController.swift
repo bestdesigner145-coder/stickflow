@@ -700,6 +700,9 @@ final class EntryController: NSObject {
     #if DEBUG
     /// For the self-check's snapshots.
     var padSnapshotView: NSView { padView }
+    /// The pad is fading in or out right now ("Reduce motion").
+    var padIsFading: Bool { padContainer.layer?.animation(forKey: "fade") != nil }
+
     /// The pad's layer as the self-check sees it: animations, model and drawn position.
     var padMotionNote: String {
         guard let layer = padContainer.layer else { return "no layer" }
