@@ -233,8 +233,11 @@ struct TuningPanelView: View {
                       isOn: $tuning.rulesAssumeAfternoon, onChange: onTuningChange)
             ToggleRow(title: "⌘Z restores a peeled sticker while the toast is up",
                       isOn: $tuning.undoPeelUsesCommandZ, onChange: onTuningChange)
+            ToggleRow(title: String(localized: "tuning.smooth_pad_motion"),
+                      isOn: $preferences.smoothPadMotion, onChange: onPreferencesChange)
             ToggleRow(title: "Pad goes back on the reversed drawer curve",
                       isOn: $tuning.padHideCurveReversed, onChange: onTuningChange)
+                .disabled(preferences.smoothPadMotion)
         } header: {
             Text(verbatim: "Behaviour variants (rule 0.3)")
         }

@@ -515,10 +515,11 @@ enum SelfCheck {
                     _ = captureScreen(entry.padWindowFrameForSnapshot.insetBy(dx: -20, dy: -20), on: screen, name: "12b-screen-pad")
                 }
 
-                // Fix K1: the pad goes back as it came out, slowly at first; it does not vanish.
+                // Check the original motion with the new behaviour switched off.
                 // A virtual Mac may sleep longer than asked, so the pad is read where its own
                 // move says it is in time, and the reading is tried again if it came too late.
                 let reachOut = entry.padOnScreen.reach
+                environment.preferences.smoothPadMotion = false
                 var sampled = false
                 for _ in 0..<4 where !sampled {
                     if entry.phase != .open {
@@ -538,6 +539,28 @@ enum SelfCheck {
                 }
                 if !sampled { note("the pad's move could not be read in time on this machine") }
                 check(entry.phase == .idle && entry.padOnScreen.reach < 1, "the cursor leaves and the pad goes back")
+                environment.preferences.smoothPadMotion = true
+                hold(spot, for: 0.7)
+                await pause(0.4)
+                if let openFrame = entry.visiblePadFrame {
+                    // Stretch only the return so a busy runner can sample it mid-flight.
+                    let originalDuration = tuning.padHideDuration
+                    tuning.padHideDuration = 1
+                    hold(far, for: 0.5)
+                    await pause(0.35)
+                    let visible = entry.padOnScreen.reach
+                    let direction: CGFloat = openFrame.midX < spot.x ? -1 : 1
+                    let paper = CGPoint(x: spot.x + direction * visible / 2, y: spot.y)
+                    check(visible > 0 && visible < reachOut, "paper is still moving when the cursor returns")
+                    check(!zone.contains(paper) && entry.needsPointer(at: paper), "the retreating sheet can recall the pointer tracker")
+                    hold(paper, for: 0.02)
+                    check(entry.phase == .open, "returning to the visible sheet reverses its slide without another dwell")
+                    tuning.padHideDuration = originalDuration
+                    await pause(0.4)
+                    check(abs(entry.padOnScreen.reach - reachOut) < 1, "the recalled sheet settles at its open position")
+                } else {
+                    check(false, "the smooth pad opens before checking the reversal")
+                }
                 // With "Reduce motion" it fades where it is, 150 ms.
                 let motionBefore = tuning.forcedReduceMotion
                 tuning.forcedReduceMotion = true
