@@ -129,6 +129,22 @@ final class EdgeIntentDetectorTests: XCTestCase {
         XCTAssertEqual(detector.phase, .open)
     }
 
+    func testReturningToTheVisiblePartOfARetreatingPadReopensIt() {
+        var detector = EdgeIntentDetector()
+        detector.forceOpen()
+        rest(&detector, x: 1100, from: 0, to: 0.4, pad: pad)
+        XCTAssertEqual(detector.phase, .idle)
+
+        let remaining = CGRect(x: 1410, y: pad.minY, width: 30, height: pad.height)
+        let outside = Input(location: CGPoint(x: 1380, y: 450), time: 0.42)
+        let inside = CGPoint(x: 1420, y: 450)
+        let drag = Input(location: inside, isMouseDown: true, time: 0.44)
+        XCTAssertEqual(detector.update(outside, scene: scene(at: 1380, pad: remaining), rules: free), .idle)
+        XCTAssertEqual(detector.update(drag, scene: scene(at: 1420, pad: remaining), rules: free), .idle)
+        let hover = Input(location: inside, time: 0.46)
+        XCTAssertEqual(detector.update(hover, scene: scene(at: 1420, pad: remaining), rules: free), .open)
+    }
+
     func testFastPassDoesNothing() {
         // 1500 pt/s straight through the zone, as on the way to the next display.
         var detector = EdgeIntentDetector()

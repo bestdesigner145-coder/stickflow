@@ -141,6 +141,11 @@ public struct EdgeIntentDetector: Equatable, Sendable {
 
         switch phase {
         case .idle:
+            // During retraction the caller may still see paper under the cursor.
+            if !input.isMouseDown, scene.padFrame?.contains(input.location) == true {
+                forceOpen()
+                return phase
+            }
             guard inZone, !input.isMouseDown else {
                 // A pressed button means a drag or a selection; start over afterwards.
                 restingSince = nil

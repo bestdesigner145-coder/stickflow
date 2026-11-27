@@ -52,6 +52,7 @@ final class EntryController: NSObject {
     private let padView = PadView(frame: .zero)
     private let padShadow = PadShadowView(frame: .zero)
     private let glowView = PadGlowView(frame: .zero)
+    private var padTransition = 0
     let draft: DraftController
     /// Dictation into a sticker that is already there (spec 18.4).
     private(set) var voice: StickerVoice?
@@ -288,10 +289,20 @@ final class EntryController: NSObject {
 
     // MARK: Pointer
 
+    /// While the destination is already hidden, only paper still on screen can recall the pad.
+    private var retreatingPadFrame: CGRect? {
+        guard phase == .idle, preferences.smoothPadMotion, !tuning.reduceMotion,
+              let layer = padContainer.layer, layer.animation(forKey: "slideMove") != nil,
+              let shown = layer.presentation() else { return nil }
+        let window = padPanel.frame
+        return shown.frame.offsetBy(dx: window.minX, dy: window.minY).intersection(window)
+    }
+
     /// True while the zone or the pad needs pointer samples even if the mouse is still.
     func needsPointer(at location: CGPoint) -> Bool {
         guard !isSuppressed, let layout else { return false }
         if detector.needsContinuousInput { return true }
+        if retreatingPadFrame?.contains(location) == true { return true }
         return layout.zone.insetBy(dx: -24, dy: -24).contains(location)
     }
 
@@ -299,7 +310,7 @@ final class EntryController: NSObject {
         guard !isSuppressed, isScripted || !ignoresLivePointer, let layout else { return }
         let scene = EdgeIntentDetector.Scene(
             zone: layout.zone,
-            padFrame: visiblePadFrame,
+            padFrame: visiblePadFrame ?? retreatingPadFrame,
             distanceToEdge: layout.edge.distance(of: sample.location, on: layout.screen),
             holdsOpen: draft.isOpen
         )
@@ -316,6 +327,13 @@ final class EntryController: NSObject {
 
     // MARK: Showing the pad
 
+    private func padCurve(for phase: EdgeIntentDetector.Phase) -> MotionCurve {
+        if preferences.smoothPadMotion {
+            return phase == .idle ? .padRetreat : .padReveal
+        }
+        return phase == .idle && tuning.padHideCurveReversed ? MotionCurve.drawer.reversed : .drawer
+    }
+
     private func show(_ newPhase: EdgeIntentDetector.Phase, animated: Bool) {
         phase = newPhase
         guard let layout, !isSuppressed || newPhase == .idle else { return }
@@ -331,7 +349,8 @@ final class EntryController: NSObject {
         case .peek: tuning.padPeekDuration
         case .open: tuning.padOpenDuration
         }
-        let duration = animated ? tuning.scaled(base) : 0
+        let scale = preferences.smoothPadMotion ? tuning.padGlideDurationScale : 1
+        let duration = animated ? tuning.scaled(base * scale) : 0
 
         if newPhase != .idle {
             // Above the stickers that have appeared since; the window is on screen already.
@@ -344,15 +363,17 @@ final class EntryController: NSObject {
         // The pad, its shadow and the oval move as layers on the render server, at
         // the display's own rate; the window stays where it is (spec 6.7 `drawer`, fix H5).
         let isOut = newPhase != .idle
-        // Going back, the pad and the oval play the way out backwards (fix K1).
-        let curve: MotionCurve = !isOut && tuning.padHideCurveReversed ? MotionCurve.drawer.reversed : .drawer
+        let curve = padCurve(for: newPhase)
         let fade = animated && reduceMotion ? tuning.scaled(tuning.padReduceMotionFade) : 0
         let time = reduceMotion ? fade : duration
+        padTransition += 1
+        let transition = padTransition
         CATransaction.begin()
         if time > 0 {
             CATransaction.setCompletionBlock { [weak self] in
                 MainActor.assumeIsolated {
-                    self?.finishShowing(newPhase, target: target)
+                    guard let self, self.padTransition == transition else { return }
+                    self.finishShowing(newPhase, target: target)
                 }
             }
         }

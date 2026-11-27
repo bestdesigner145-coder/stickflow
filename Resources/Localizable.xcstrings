@@ -1,6 +1,23 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "tuning.smooth_pad_motion": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Smooth pad motion"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Плавное движение пачки"
+          }
+        }
+      }
+    },
     "color.blue": {
       "extractionState": "manual",
       "localizations": {

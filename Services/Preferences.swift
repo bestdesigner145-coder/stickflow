@@ -71,6 +71,7 @@ final class Preferences {
     var callEdge: CallEdge.Preference
     /// The thin strip of paper at the edge that hints where the pad is.
     var showsEdgeTab: Bool
+    var smoothPadMotion: Bool
     var defaultColor: PaperColor
     /// UUID of the display stickers live on; `nil` means the display with the menu bar.
     var stickerDisplayUUID: String?
@@ -107,6 +108,7 @@ final class Preferences {
         static let showOverFullscreen = "showOverFullscreen"
         static let callEdge = "callEdge"
         static let showsEdgeTab = "showsEdgeTab"
+        static let smoothPadMotion = "smoothPadMotion"
         static let defaultColor = "defaultColor"
         static let stickerDisplayUUID = "stickerDisplayUUID"
         static let editHintShownCount = "editHintShownCount"
@@ -134,6 +136,7 @@ final class Preferences {
             Key.showOverFullscreen: false,
             Key.callEdge: CallEdge.Preference.automatic.rawValue,
             Key.showsEdgeTab: true,
+            Key.smoothPadMotion: true,
             Key.defaultColor: PaperColor.default.rawValue,
             Key.editHintShownCount: 0,
             Key.structurerChoice: StructurerChoice.local.rawValue,
@@ -154,6 +157,7 @@ final class Preferences {
         showOverFullscreen = defaults.bool(forKey: Key.showOverFullscreen)
         callEdge = defaults.string(forKey: Key.callEdge).flatMap(CallEdge.Preference.init(rawValue:)) ?? .automatic
         showsEdgeTab = defaults.bool(forKey: Key.showsEdgeTab)
+        smoothPadMotion = defaults.bool(forKey: Key.smoothPadMotion)
         defaultColor = defaults.string(forKey: Key.defaultColor).flatMap { PaperColor(stored: $0) } ?? .default
         stickerDisplayUUID = defaults.string(forKey: Key.stickerDisplayUUID)
         editHintShownCount = defaults.integer(forKey: Key.editHintShownCount)
@@ -184,6 +188,7 @@ final class Preferences {
         defaults.set(showOverFullscreen, forKey: Key.showOverFullscreen)
         defaults.set(callEdge.rawValue, forKey: Key.callEdge)
         defaults.set(showsEdgeTab, forKey: Key.showsEdgeTab)
+        defaults.set(smoothPadMotion, forKey: Key.smoothPadMotion)
         defaults.set(defaultColor.rawValue, forKey: Key.defaultColor)
         if let stickerDisplayUUID {
             defaults.set(stickerDisplayUUID, forKey: Key.stickerDisplayUUID)

@@ -111,6 +111,8 @@ final class Tuning {
     var padPeekDuration: Double = 0.18
     var padOpenDuration: Double = 0.22
     var padHideDuration: Double = 0.18
+    /// Give the last few points of paper travel time to settle.
+    var padGlideDurationScale: Double = 1.25
     /// Fix K1: the pad goes back the way it came out, the `drawer` curve played
     /// backwards (slow start, fast end). Played forwards, the curve covers most
     /// of the way in its first frames, and the pad seems to vanish at once.
@@ -286,6 +288,10 @@ struct MotionCurve: Sendable {
     static let easeInOut = MotionCurve(c1x: 0.77, c1y: 0, c2x: 0.175, c2y: 1)
     /// Pad, edge panel and history sliding out.
     static let drawer = MotionCurve(c1x: 0.32, c1y: 0.72, c2x: 0, c2y: 1)
+    /// Paper comes towards the cursor quickly and settles without overshooting.
+    static let padReveal = MotionCurve(c1x: 0.22, c1y: 0.65, c2x: 0.30, c2y: 1)
+    /// Ease away from rest and slow down again as the last sheet clears the edge.
+    static let padRetreat = MotionCurve(c1x: 0.42, c1y: 0, c2x: 0.56, c2y: 1)
     /// Colour, texture, highlight.
     static let ease = MotionCurve(c1x: 0.25, c1y: 0.1, c2x: 0.25, c2y: 1)
 
